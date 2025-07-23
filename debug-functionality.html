@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test - Audio Text Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4">Debug Test</h1>
+        
+        <div class="space-y-4">
+            <!-- Test 1: Clear All Button -->
+            <div class="bg-white p-4 rounded">
+                <h2 class="font-bold mb-2">Test 1: Clear All Button</h2>
+                <button id="test-clear-all" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                    Test Clear All
+                </button>
+                <p id="clear-all-result" class="mt-2 text-sm text-gray-600"></p>
+            </div>
+            
+            <!-- Test 2: Project Creation -->
+            <div class="bg-white p-4 rounded">
+                <h2 class="font-bold mb-2">Test 2: Project Creation</h2>
+                <button id="test-create-project" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Test Create Project
+                </button>
+                <p id="create-project-result" class="mt-2 text-sm text-gray-600"></p>
+            </div>
+            
+            <!-- Test 3: Tooltip -->
+            <div class="bg-white p-4 rounded">
+                <h2 class="font-bold mb-2">Test 3: Tooltip</h2>
+                <div class="project-name-cell" data-full-name="This is a very long project name that should show a tooltip when you hover over it">
+                    This is a very long project name...
+                </div>
+                <p class="mt-2 text-sm text-gray-600">Hover over the text above to see tooltip</p>
+            </div>
+            
+            <!-- Test Results -->
+            <div class="bg-white p-4 rounded">
+                <h2 class="font-bold mb-2">Console Output</h2>
+                <pre id="console-output" class="text-xs bg-gray-100 p-2 rounded max-h-40 overflow-y-auto"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/project-manager.js"></script>
+    <script src="js/ui-controller-fixed.js"></script>
+    
+    <script>
+        // Override console.log to show in debug output
+        const originalLog = console.log;
+        const consoleOutput = document.getElementById('console-output');
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            consoleOutput.textContent += args.join(' ') + '\n';
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        };
+        
+        // Initialize components
+        let uiController;
+        try {
+            console.log('Initializing UIController...');
+            uiController = new UIController();
+            console.log('UIController initialized successfully');
+        } catch (error) {
+            console.log('Error initializing UIController:', error.message);
+        }
+        
+        // Test 1: Clear All
+        document.getElementById('test-clear-all').addEventListener('click', () => {
+            const result = document.getElementById('clear-all-result');
+            try {
+                console.log('Testing Clear All...');
+                if (uiController && typeof uiController.clearAllProjects === 'function') {
+                    console.log('clearAllProjects method exists');
+                    result.textContent = '✅ Method exists - check console for execution';
+                    result.className = 'mt-2 text-sm text-green-600';
+                } else {
+                    result.textContent = '❌ clearAllProjects method not found';
+                    result.className = 'mt-2 text-sm text-red-600';
+                }
+            } catch (error) {
+                result.textContent = '❌ Error: ' + error.message;
+                result.className = 'mt-2 text-sm text-red-600';
+            }
+        });
+        
+        // Test 2: Project Creation
+        document.getElementById('test-create-project').addEventListener('click', () => {
+            const result = document.getElementById('create-project-result');
+            try {
+                console.log('Testing Project Creation...');
+                if (projectManager && typeof projectManager.createProject === 'function') {
+                    const testProject = projectManager.createProject({
+                        name: 'Test Project with Long Name to Test Tooltip Functionality',
+                        assignedTo: 'Test User'
+                    });
+                    console.log('Test project created:', testProject.id);
+                    result.textContent = '✅ Project created successfully - ID: ' + testProject.id;
+                    result.className = 'mt-2 text-sm text-green-600';
+                    
+                    // Refresh UI if possible
+                    if (uiController && typeof uiController.refreshProjectsList === 'function') {
+                        uiController.refreshProjectsList();
+                    }
+                } else {
+                    result.textContent = '❌ projectManager.createProject method not found';
+                    result.className = 'mt-2 text-sm text-red-600';
+                }
+            } catch (error) {
+                result.textContent = '❌ Error: ' + error.message;
+                result.className = 'mt-2 text-sm text-red-600';
+            }
+        });
+    </script>
+</body>
+</html>

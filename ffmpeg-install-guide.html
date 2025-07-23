@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FFmpeg Installation Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background: #f5f5f7;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .error-box {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .success-box {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .code-block {
+            background: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .step {
+            background: #f8f9fa;
+            border-left: 4px solid #007AFF;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+        h1 { color: #1d1d1f; }
+        h2 { color: #333; margin-top: 30px; }
+        .highlight { background: #fff3cd; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><span class="icon">🚨</span>FFmpeg Installation Required</h1>
+        
+        <div class="error-box">
+            <strong>Error Detected:</strong> Whisper needs FFmpeg to process audio files, but it's not installed on your system.
+        </div>
+
+        <h2>Quick Fix (2 minutes)</h2>
+        
+        <div class="step">
+            <strong>Step 1:</strong> Open Terminal app on your Mac
+            <br><small>You can find it in Applications → Utilities → Terminal</small>
+        </div>
+
+        <div class="step">
+            <strong>Step 2:</strong> Install FFmpeg using Homebrew
+            <div class="code-block">brew install ffmpeg</div>
+            <small>This will take 2-3 minutes to download and install.</small>
+        </div>
+
+        <div class="step">
+            <strong>Step 3:</strong> Verify the installation
+            <div class="code-block">which ffmpeg</div>
+            <small>Should show: <span class="highlight">/opt/homebrew/bin/ffmpeg</span></small>
+        </div>
+
+        <div class="step">
+            <strong>Step 4:</strong> Test Whisper again
+            <div class="code-block">cd "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+source whisper-env/bin/activate
+whisper --help</div>
+        </div>
+
+        <div class="success-box">
+            <strong>After installation:</strong> Your Whisper setup will be complete and ready to process unlimited audio files for free!
+        </div>
+
+        <h2>Alternative Methods</h2>
+        
+        <h3>If Homebrew isn't installed:</h3>
+        <div class="code-block">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</div>
+        <p>Then run: <code>brew install ffmpeg</code></p>
+
+        <h3>If you prefer manual installation:</h3>
+        <p>Download FFmpeg from <a href="https://ffmpeg.org/download.html#build-mac" target="_blank">ffmpeg.org</a> and follow their Mac installation guide.</p>
+
+        <h2>Why FFmpeg is needed</h2>
+        <p>FFmpeg is a powerful multimedia framework that:</p>
+        <ul>
+            <li>Converts audio formats (MP3, WAV, M4A, etc.)</li>
+            <li>Handles video audio extraction</li>
+            <li>Processes audio streams for Whisper</li>
+            <li>Enables batch processing of multiple files</li>
+        </ul>
+
+        <h2>After Installation</h2>
+        <p>Once FFmpeg is installed, you can:</p>
+        <ul>
+            <li>✅ Process unlimited audio files (no 25MB limit)</li>
+            <li>✅ Handle any audio format (MP3, WAV, M4A, etc.)</li>
+            <li>✅ Transcribe long Buddhist talks (3+ hours)</li>
+            <li>✅ Batch process multiple recordings</li>
+            <li>✅ Use the Local Whisper tab in your web app</li>
+        </ul>
+
+        <div class="success-box">
+            <strong>Once complete:</strong> Return to your Audio-to-Text Converter and try the Local Whisper tab again!
+        </div>
+    </div>
+</body>
+</html>

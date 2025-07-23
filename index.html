@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css?v=20250722c">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Minimal Header -->
+    <header class="bg-white border-b border-gray-200 py-1">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 bg-gradient-to-r from-blue-500 to-purple-600 rounded flex items-center justify-center">
+                        <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-sm font-medium text-gray-700">PALAScribe</h1>
+                </div>
+                
+                <!-- Processing Status Indicator -->
+                <div id="processing-status-indicator" class="hidden flex items-center space-x-2 text-xs text-blue-600">
+                    <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                    <span id="processing-status-text">Processing...</span>
+                    <button id="btn-cancel-processing" class="ml-2 text-red-600 hover:text-red-700 text-xs underline">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Success/Error Notification -->
+    <div id="notification-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+
+        <!-- Main Dashboard View -->
+        <div id="view-dashboard" class="view-content">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-gray-800 mb-4">PALAScribe</h1>
+                <p class="text-xl text-gray-600 mb-8">VRI Audio Transcription</p>
+                
+                <!-- Main Action Buttons -->
+                <div class="flex flex-col sm:flex-row justify-center gap-6 max-w-4xl mx-auto">
+                    <!-- Start Audio Conversion -->
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-8 flex-1 hover:shadow-xl transition-shadow">
+                        <div class="text-5xl mb-4">🎙️</div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Start Audio Conversion</h3>
+                        <p class="text-gray-600 mb-6">Upload and transcribe new audio files with intelligent Pali correction</p>
+                        <button id="btn-start-conversion" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full">
+                            Start New Project
+                        </button>
+                    </div>
+
+                    <!-- Ready for Review -->
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-8 flex-1 hover:shadow-xl transition-shadow">
+                        <div class="text-5xl mb-4">📝</div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Ready for Review</h3>
+                        <p class="text-gray-600 mb-6">View and edit transcriptions that need review and approval</p>
+                        <button id="btn-ready-review" class="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full">
+                            View Pending
+                        </button>
+                    </div>
+
+                    <!-- Approved Projects -->
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-200 p-8 flex-1 hover:shadow-xl transition-shadow">
+                        <div class="text-5xl mb-4">✅</div>
+                        <h3 class="text-xl font-semibold text-gray-800 mb-3">Approved</h3>
+                        <p class="text-gray-600 mb-6">Access completed and approved transcription projects</p>
+                        <button id="btn-approved" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full">
+                            View Approved
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects List Views (Ready for Review) -->
+        <div id="view-ready-review" class="view-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center space-x-4">
+                        <button id="btn-back-to-dashboard-review" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors text-sm">
+                            ← Back to Dashboard
+                        </button>
+                        <h2 class="text-xl font-semibold text-gray-800">Ready for Review</h2>
+                    </div>
+                    <div class="flex gap-3">
+                        <button id="btn-clear-all-review" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg transition-colors text-sm border border-red-200">
+                            🗑️ Clear All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="mb-6">
+                    <input type="text" id="search-review-projects" placeholder="Search ready for review projects..." 
+                           class="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+                </div>
+
+                <!-- Projects Table -->
+                <div class="overflow-hidden border border-gray-200 rounded-lg">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 projects-table">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" data-column="name" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Project Name ⇅
+                                    </th>
+                                    <th scope="col" data-column="status" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Status ⇅
+                                    </th>
+                                    <th scope="col" data-column="created" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Created ⇅
+                                    </th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Audio File
+                                    </th>
+                                    <th scope="col" data-column="assigned" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Assigned To ⇅
+                                    </th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="review-projects-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Projects will be dynamically inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-review-state" class="text-center py-12 hidden">
+                    <div class="text-6xl mb-4">📝</div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No projects ready for review</h3>
+                    <p class="text-gray-600 mb-6">Complete some transcriptions first to see them here</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Projects List Views (Approved) -->
+        <div id="view-approved" class="view-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center space-x-4">
+                        <button id="btn-back-to-dashboard-approved" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors text-sm">
+                            ← Back to Dashboard
+                        </button>
+                        <h2 class="text-xl font-semibold text-gray-800">Approved Projects</h2>
+                    </div>
+                    <div class="flex gap-3">
+                        <button id="btn-clear-all-approved" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg transition-colors text-sm border border-red-200">
+                            🗑️ Clear All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="mb-6">
+                    <input type="text" id="search-approved-projects" placeholder="Search approved projects..." 
+                           class="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                </div>
+
+                <!-- Projects Table -->
+                <div class="overflow-hidden border border-gray-200 rounded-lg">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 projects-table">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" data-column="name" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Project Name ⇅
+                                    </th>
+                                    <th scope="col" data-column="status" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Status ⇅
+                                    </th>
+                                    <th scope="col" data-column="created" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Created ⇅
+                                    </th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Audio File
+                                    </th>
+                                    <th scope="col" data-column="assigned" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Assigned To ⇅
+                                    </th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="approved-projects-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Projects will be dynamically inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-approved-state" class="text-center py-12 hidden">
+                    <div class="text-6xl mb-4">✅</div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">No approved projects yet</h3>
+                    <p class="text-gray-600 mb-6">Approve some transcriptions to see them here</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Dialog for Creating New Project -->
+        <div id="new-project-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-gray-800">Create New Project</h2>
+                        <button id="btn-close-modal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <form id="create-project-form" class="space-y-6">
+                        <div>
+                            <label for="project-audio-file" class="block text-sm font-medium text-gray-700 mb-2">Choose Audio File</label>
+                            <input type="file" id="project-audio-file" accept="audio/*" required
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">Select an audio file to transcribe</p>
+                        </div>
+
+                        <div>
+                            <label for="project-name" class="block text-sm font-medium text-gray-700 mb-2">Project Name</label>
+                            <input type="text" id="project-name" required
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">Auto-filled from audio file name (you can edit this)</p>
+                        </div>
+
+                        <div>
+                            <label for="assigned-to" class="block text-sm font-medium text-gray-700 mb-2">Assigned To (Optional)</label>
+                            <input type="text" id="assigned-to" placeholder="Enter name..."
+                                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="project-preview-mode" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                            <label for="project-preview-mode" class="text-sm text-gray-700">
+                                Preview Mode (Process only first 60 seconds for testing)
+                            </label>
+                        </div>
+
+                        <div class="flex space-x-4 pt-4">
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium flex-1">
+                                Create Project
+                            </button>
+                            <button type="button" id="btn-cancel-create" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors flex-1">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Editing Interface - Hidden Until Project Selected -->
+        <div id="view-review" class="view-content hidden h-screen flex flex-col">
+            <!-- Ultra Compact Header - Only Essential Info -->
+            <div class="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
+                <div class="flex items-center justify-between">
+                    <!-- Project Info & Audio Player in One Row -->
+                    <div class="flex items-center space-x-6">
+                        <div id="review-project-info" class="text-sm text-gray-700">
+                            <!-- Project name and status will be inserted here -->
+                        </div>
+                        <div id="review-audio-player" class="flex items-center">
+                            <!-- Compact audio player will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex items-center space-x-2">
+                        <button id="btn-save-draft" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors">
+                            💾 Save Draft
+                        </button>
+                        <button id="btn-approve-final" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors">
+                            ✅ Approve
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Editing Area - 80% Height -->
+            <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 bg-gray-50 overflow-hidden">
+                <!-- Text Editor (Left Side) -->
+                <div class="flex flex-col h-full">
+                    <!-- Compact Editor Header -->
+                    <div class="bg-gray-100 border border-gray-300 rounded-t-lg px-3 py-2 flex items-center justify-between text-sm">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-2">
+                                <button id="btn-back-to-projects" class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors" title="Back to Projects">
+                                    ← Back
+                                </button>
+                                <h3 class="font-medium text-gray-800">Edit</h3>
+                            </div>
+                            <div class="text-xs text-gray-500 flex space-x-2">
+                                <span id="word-count">0 words</span>
+                                <span id="character-count">0 chars</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Compact Toolbar -->
+                        <div id="editor-toolbar" class="flex items-center gap-1">
+                            <!-- Format Dropdown -->
+                            <select class="toolbar-select-sm text-xs px-1 py-1 border border-gray-300 rounded" data-command="formatBlock" title="Format">
+                                <option value="">Format</option>
+                                <option value="p">Paragraph</option>
+                                <option value="h1">Heading 1</option>
+                                <option value="h2">Heading 2</option>
+                                <option value="h3">Heading 3</option>
+                                <option value="blockquote">Quote</option>
+                            </select>
+                            
+                            <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                            
+                            <button type="button" class="toolbar-btn-sm" data-command="bold" title="Bold (Ctrl+B)">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M6 4v12h4.5c2.5 0 4.5-2 4.5-4.5 0-1.5-1-3-2.5-3.5C13.5 7.5 14 6.5 14 5.5 14 3.5 12.5 2 10.5 2H6v2zm2 2h2c.5 0 1 .5 1 1s-.5 1-1 1H8V6zm0 6h2.5c.8 0 1.5.7 1.5 1.5S11.3 15 10.5 15H8v-3z"/>
+                                </svg>
+                            </button>
+                            <button type="button" class="toolbar-btn-sm" data-command="italic" title="Italic (Ctrl+I)">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M8 2h6v2h-2l-2 12h2v2H6v-2h2L10 4H8V2z"/>
+                                </svg>
+                            </button>
+                            <button type="button" class="toolbar-btn-sm" data-command="underline" title="Underline (Ctrl+U)">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M6 3v7c0 1.1.9 2 2 2h4c1.1 0 2-.9 2-2V3h2v7c0 2.2-1.8 4-4 4h-4c-2.2 0-4-1.8-4-4V3h2zM4 15h12v2H4v-2z"/>
+                                </svg>
+                            </button>
+                            
+                            <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                            
+                            <button type="button" class="toolbar-btn-sm" data-command="removeFormat" title="Clear Format">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M8.5 3h3l1.5 4.5L11.5 9h-3L7 4.5 8.5 3zM4 15h12v2H4v-2zM17 1L3 15l1.4 1.4L18.4 2.4 17 1z"/>
+                                </svg>
+                            </button>
+                            <button type="button" id="toggle-source" class="toolbar-btn-sm" title="Toggle HTML Source">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Rich Text Editor - Full Height -->
+                    <div id="transcription-editor" 
+                         class="flex-1 p-4 border-l border-r border-b border-gray-300 rounded-b-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base leading-relaxed bg-white overflow-y-auto resize-none" 
+                         contenteditable="true" 
+                         data-placeholder="Transcribed text will appear here for editing..."
+                         style="min-height: calc(80vh - 120px);"></div>
+                    
+                    <!-- Hidden textarea for source mode -->
+                    <textarea id="transcription-source" 
+                              class="flex-1 p-4 border-l border-r border-b border-gray-300 rounded-b-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm leading-relaxed bg-white hidden"
+                              placeholder="HTML source..."
+                              style="min-height: calc(80vh - 120px);"></textarea>
+                </div>
+                
+                <!-- Live Preview (Right Side) -->
+                <div class="flex flex-col h-full">
+                    <!-- Compact Preview Header -->
+                    <div class="bg-purple-50 border border-purple-200 rounded-t-lg px-3 py-2 flex items-center justify-between text-sm">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="font-medium text-gray-800">Preview</h3>
+                            <div class="flex items-center space-x-1 text-xs">
+                                <div class="w-2 h-2 bg-purple-600 rounded"></div>
+                                <span class="text-gray-600">Pali terms</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Preview Content - Full Height -->
+                    <div class="flex-1 p-4 bg-gradient-to-br from-purple-50 to-blue-50 border-l border-r border-b border-purple-200 rounded-b-lg overflow-y-auto" 
+                         style="min-height: calc(80vh - 120px);">
+                        <div id="transcription-preview" class="text-base text-gray-800 leading-relaxed transcription-text min-h-full">
+                            <div class="text-gray-400 italic text-center py-20">
+                                <div class="text-4xl mb-2">👁️</div>
+                                <div>Preview will appear here as you type...</div>
+                                <div class="text-sm mt-2">Pali terms will be highlighted in purple</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Action Bar - Compact -->
+            <div class="bg-white border-t border-gray-200 px-4 py-2 flex-shrink-0">
+                <div class="flex justify-between items-center">
+                    <div class="flex gap-2">
+                        <button id="btn-reset-text" class="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm transition-colors">
+                            🔄 Reset
+                        </button>
+                        <button id="btn-export-docx" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm transition-colors">
+                            📄 Export DOCX
+                        </button>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Use Ctrl+B/I/U for formatting • Space to play/pause audio
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Scripts with cache busting for updated workflow -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/pali-dictionary.js?v=20250721n"></script>
+    <script src="js/audio-processor.js?v=20250721l"></script>
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script src="js/ui-controller-fixed.js?v=20250722i"></script>
+    <script src="js/app.js?v=20250722a"></script>
+</body>
+</html>

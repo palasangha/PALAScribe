@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear All PALAScribe Projects</title>
+    <style>
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            max-width: 600px; 
+            margin: 50px auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button { 
+            background: #dc3545; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #c82333; }
+        .success { color: #28a745; margin-top: 20px; font-weight: bold; }
+        .info { background: #e7f3ff; padding: 15px; border-radius: 6px; margin: 20px 0; }
+        .warning { background: #fff3cd; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Clear All PALAScribe Projects</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Warning:</strong> This will permanently delete all projects and cannot be undone!
+        </div>
+        
+        <div class="info">
+            <strong>Current Projects:</strong> <span id="project-count">Loading...</span>
+        </div>
+        
+        <button onclick="clearAllProjects()">Clear All Projects</button>
+        <button onclick="showProjects()" style="background: #007bff;">Show Current Projects</button>
+        
+        <div id="result"></div>
+        <div id="project-list"></div>
+    </div>
+
+    <script>
+        // Simple project manager for clearing projects
+        class SimpleProjectManager {
+            constructor() {
+                this.storageKey = 'audioTextConverter_projects'; // Corrected storage key
+            }
+            
+            getAllProjects() {
+                const stored = localStorage.getItem(this.storageKey);
+                return stored ? JSON.parse(stored) : [];
+            }
+            
+            clearAllProjects() {
+                // Get existing projects to clean up URLs
+                const projects = this.getAllProjects();
+                
+                // Clean up any blob URLs
+                projects.forEach(project => {
+                    if (project.generatedDocxInfo && project.generatedDocxInfo.url) {
+                        URL.revokeObjectURL(project.generatedDocxInfo.url);
+                    }
+                    if (project.reviewedDocxInfo && project.reviewedDocxInfo.url) {
+                        URL.revokeObjectURL(project.reviewedDocxInfo.url);
+                    }
+                    if (project.audioUrl) {
+                        URL.revokeObjectURL(project.audioUrl);
+                    }
+                });
+                
+                // Clear localStorage
+                localStorage.removeItem(this.storageKey);
+                
+                return projects.length;
+            }
+        }
+        
+        const projectManager = new SimpleProjectManager();
+        
+        function updateProjectCount() {
+            const projects = projectManager.getAllProjects();
+            document.getElementById('project-count').textContent = `${projects.length} projects found`;
+            return projects;
+        }
+        
+        function clearAllProjects() {
+            const projects = projectManager.getAllProjects();
+            
+            if (projects.length === 0) {
+                document.getElementById('result').innerHTML = '<div class="success">No projects to clear!</div>';
+                return;
+            }
+            
+            const confirmed = confirm(`Are you sure you want to delete all ${projects.length} projects? This cannot be undone!`);
+            
+            if (confirmed) {
+                const deletedCount = projectManager.clearAllProjects();
+                document.getElementById('result').innerHTML = `<div class="success">✅ Successfully deleted ${deletedCount} projects!</div>`;
+                document.getElementById('project-list').innerHTML = '';
+                updateProjectCount();
+            }
+        }
+        
+        function showProjects() {
+            const projects = updateProjectCount();
+            
+            if (projects.length === 0) {
+                document.getElementById('project-list').innerHTML = '<div class="info">No projects found.</div>';
+                return;
+            }
+            
+            let html = '<h3>Current Projects:</h3><ul style="margin-top: 10px;">';
+            projects.forEach(project => {
+                html += `<li><strong>${project.name}</strong> - Status: ${project.status} - Created: ${new Date(project.created).toLocaleDateString()}</li>`;
+            });
+            html += '</ul>';
+            
+            document.getElementById('project-list').innerHTML = html;
+        }
+        
+        // Load project count on page load
+        window.onload = function() {
+            updateProjectCount();
+        };
+    </script>
+</body>
+</html>

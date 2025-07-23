@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Transcription Modal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <h1 class="text-2xl font-bold mb-4">Test Transcription Process</h1>
+    
+    <div class="bg-white p-4 rounded-lg shadow mb-4">
+        <input type="file" id="audioFile" accept="audio/*" class="mb-2">
+        <label class="flex items-center mb-2">
+            <input type="checkbox" id="previewMode" class="mr-2">
+            Preview Mode (60 seconds only)
+        </label>
+        <button id="testBtn" class="bg-blue-500 text-white px-4 py-2 rounded">Test Transcription</button>
+    </div>
+
+    <div id="logs" class="bg-black text-green-400 p-4 rounded-lg font-mono text-sm h-96 overflow-y-scroll"></div>
+
+    <!-- Modal -->
+    <div id="transcription-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div class="text-center">
+                <div class="text-4xl mb-4">🎤</div>
+                <h3 class="text-lg font-semibold mb-2">Processing Audio</h3>
+                <p class="text-gray-600 mb-4" id="project-name">Test Project</p>
+                <div class="flex items-center justify-center space-x-2 mb-4">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span class="text-blue-600 text-sm" id="processing-status">Processing audio...</span>
+                </div>
+                <div id="transcription-progress" class="text-xs text-gray-500 mb-4">
+                    Starting...
+                </div>
+                <button id="cancel-transcription" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div>[${time}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+
+        async function testTranscription() {
+            const audioFile = document.getElementById('audioFile').files[0];
+            const previewMode = document.getElementById('previewMode').checked;
+            
+            if (!audioFile) {
+                log('❌ No audio file selected');
+                return;
+            }
+
+            log(`🎵 Testing with file: ${audioFile.name} (${(audioFile.size/1024/1024).toFixed(2)}MB)`);
+            log(`🔍 Preview mode: ${previewMode}`);
+
+            // Check file size
+            if (audioFile.size > 10 * 1024 * 1024) { // 10MB
+                log('⚠️ Large file detected. This might timeout. Try a smaller file first.');
+            }
+
+            // Show modal
+            const modal = document.getElementById('transcription-modal');
+            const statusEl = document.getElementById('processing-status');
+            const progressEl = document.getElementById('transcription-progress');
+            
+            modal.classList.remove('hidden');
+            
+            let isCancelled = false;
+            document.getElementById('cancel-transcription').onclick = () => {
+                log('🛑 User cancelled');
+                isCancelled = true;
+                modal.classList.add('hidden');
+            };
+
+            try {
+                statusEl.textContent = 'Preparing request...';
+                progressEl.textContent = 'Building form data...';
+                log('📦 Building form data...');
+
+                const formData = new FormData();
+                formData.append('audio', audioFile);
+                formData.append('model', 'medium');
+                formData.append('language', 'English');
+                formData.append('preview', previewMode ? 'true' : 'false');
+                if (previewMode) {
+                    formData.append('preview_duration', '60');
+                }
+
+                statusEl.textContent = 'Connecting to backend...';
+                progressEl.textContent = 'Sending request to http://localhost:8765/process';
+                log('📡 Sending request to backend...');
+
+                const startTime = Date.now();
+                
+                // Add timeout to prevent hanging
+                const timeoutMs = 120000; // 2 minutes timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    log('⏰ Request timed out after 2 minutes');
+                    controller.abort();
+                }, timeoutMs);
+
+                const response = await fetch('http://localhost:8765/process', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                log(`📥 Response received: ${response.status} ${response.statusText}`);
+
+                if (isCancelled) {
+                    log('🛑 Request cancelled');
+                    return;
+                }
+
+                statusEl.textContent = 'Processing response...';
+                progressEl.textContent = 'Reading response data...';
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const processingTime = Math.round((Date.now() - startTime) / 1000);
+                    
+                    log('✅ Response parsed successfully');
+                    log(`📊 Result keys: ${Object.keys(result).join(', ')}`);
+                    log(`📊 Success: ${result.success}`);
+                    log(`📊 Preview mode: ${result.preview_mode}`);
+                    log(`📊 Word count: ${result.word_count}`);
+                    log(`📊 Processing time: ${processingTime}s`);
+
+                    if (result.success === false) {
+                        log(`❌ Backend error: ${result.error}`);
+                        statusEl.textContent = 'Backend error';
+                        progressEl.textContent = result.error;
+                    } else {
+                        log('✅ Transcription successful!');
+                        statusEl.textContent = 'Completed!';
+                        const wordCount = result.word_count || 0;
+                        const modeText = result.preview_mode ? ` (${result.preview_duration}s preview)` : ' (full audio)';
+                        progressEl.textContent = `${wordCount} words in ${processingTime}s${modeText}`;
+                        
+                        // Auto-close after 3 seconds
+                        setTimeout(() => {
+                            modal.classList.add('hidden');
+                            log('🎉 Modal closed automatically');
+                        }, 3000);
+                    }
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ HTTP Error: ${response.status} - ${errorText}`);
+                    statusEl.textContent = 'Request failed';
+                    progressEl.textContent = `Error ${response.status}: ${errorText}`;
+                }
+
+            } catch (error) {
+                log(`❌ Exception: ${error.message}`);
+                if (error.name === 'AbortError') {
+                    log('⏰ Request was aborted due to timeout');
+                    statusEl.textContent = 'Request timed out';
+                    progressEl.textContent = 'Try with a smaller audio file';
+                } else {
+                    statusEl.textContent = 'Error occurred';
+                    progressEl.textContent = error.message;
+                }
+            } finally {
+                modal.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('testBtn').addEventListener('click', testTranscription);
+        log('🚀 Test page loaded. Select an audio file and click Test Transcription.');
+        log('🔧 Make sure the Whisper server is running on localhost:8765');
+    </script>
+</body>
+</html>

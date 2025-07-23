@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <div id="output"></div>
+
+    <script src="js/config.js"></script>
+    <script src="js/pali-dictionary.js"></script>
+    <script src="js/audio-processor.js"></script>
+    <script src="js/project-manager.js"></script>
+    <script src="js/ui-controller.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            const div = document.createElement('div');
+            div.textContent = message;
+            output.appendChild(div);
+            console.log(message);
+        }
+        
+        // Check if all components loaded
+        log('Testing component loading...');
+        
+        setTimeout(() => {
+            log('CONFIG: ' + (typeof CONFIG !== 'undefined' ? 'OK' : 'MISSING'));
+            log('projectManager: ' + (typeof projectManager !== 'undefined' ? 'OK' : 'MISSING'));
+            log('audioProcessor: ' + (typeof audioProcessor !== 'undefined' ? 'OK' : 'MISSING'));
+            log('paliProcessor: ' + (typeof paliProcessor !== 'undefined' ? 'OK' : 'MISSING'));
+            log('uiController: ' + (typeof uiController !== 'undefined' ? 'OK' : 'MISSING'));
+            log('audioTextApp: ' + (typeof window.audioTextApp !== 'undefined' ? 'OK' : 'MISSING'));
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pali Test</title>
+    <style>
+        .pali-text {
+            font-family: 'Times New Roman', 'Noto Serif', serif;
+            font-weight: 500;
+            color: #7c3aed;
+            background-color: #f3f4f6;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-size: 0.95em;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Testing Pali Text Recognition</h1>
+    <div>
+        <p>Sample text: The Buddha taught dhamma to the sangha. This is about nirvana and karma.</p>
+        <p>With diacritics: Pāli text with āīūṅñṭḍṇḷṃḥṣṛ characters.</p>
+    </div>
+
+    <script>
+        function highlightPaliTerms(text) {
+            // Simple heuristic: look for words with diacritics or common Pali patterns
+            const paliPatterns = [
+                // Words with diacritics
+                /\b\w*[āīūṅñṭḍṇḷṃḥṣṛ]\w*\b/g,
+                // Common Pali words
+                /\b(dhamma|dharma|sangha|buddha|nirvana|nibbana|samsara|karma|kamma|sutra|sutta|bhikkhu|bodhisattva)\b/gi
+            ];
+            
+            paliPatterns.forEach(pattern => {
+                text = text.replace(pattern, '<span class="pali-text">$&</span>');
+            });
+            
+            return text;
+        }
+
+        // Test the function
+        const testTexts = [
+            "The Buddha taught dhamma to the sangha. This is about nirvana and karma.",
+            "Pāli text with āīūṅñṭḍṇḷṃḥṣṛ characters and common words like sutta and bhikkhu."
+        ];
+
+        testTexts.forEach((text, i) => {
+            const result = highlightPaliTerms(text);
+            console.log(`Test ${i + 1}:`, result);
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>Result ${i + 1}:</strong> ${result}`;
+            document.body.appendChild(div);
+        });
+    </script>
+</body>
+</html>

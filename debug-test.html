@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <p id="status">Loading...</p>
+    
+    <script>
+        console.log('🔧 Starting debug test...');
+        
+        try {
+            console.log('1. Testing basic JavaScript...');
+            document.getElementById('status').textContent = 'Basic JS works';
+            
+            console.log('2. Loading config...');
+        } catch (error) {
+            console.error('❌ Error in debug test:', error);
+            document.getElementById('status').textContent = 'Error: ' + error.message;
+        }
+    </script>
+    
+    <!-- Load scripts one by one -->
+    <script src="js/config.js?v=20250721n"></script>
+    <script>
+        try {
+            console.log('3. Config loaded, testing CONFIG...');
+            if (typeof CONFIG !== 'undefined') {
+                console.log('✅ CONFIG available:', CONFIG);
+                document.getElementById('status').textContent = 'CONFIG loaded successfully';
+            } else {
+                console.error('❌ CONFIG not available');
+                document.getElementById('status').textContent = 'CONFIG not available';
+            }
+        } catch (error) {
+            console.error('❌ Error loading config:', error);
+            document.getElementById('status').textContent = 'Config Error: ' + error.message;
+        }
+    </script>
+    
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script>
+        try {
+            console.log('4. Project manager loaded, testing...');
+            if (typeof projectManager !== 'undefined') {
+                console.log('✅ projectManager available:', projectManager);
+                document.getElementById('status').textContent = 'ProjectManager loaded successfully';
+            } else {
+                console.error('❌ projectManager not available');
+                document.getElementById('status').textContent = 'ProjectManager not available';
+            }
+        } catch (error) {
+            console.error('❌ Error loading project manager:', error);
+            document.getElementById('status').textContent = 'ProjectManager Error: ' + error.message;
+        }
+    </script>
+    
+    <script src="js/ui-controller-fixed.js?v=20250721n"></script>
+    <script>
+        try {
+            console.log('5. UI Controller loaded, testing...');
+            if (typeof UIController !== 'undefined') {
+                console.log('✅ UIController class available');
+                document.getElementById('status').textContent = 'UIController class available';
+                
+                console.log('6. Creating UIController instance...');
+                const testUI = new UIController();
+                console.log('✅ UIController instance created successfully');
+                document.getElementById('status').textContent = 'UIController created successfully';
+            } else {
+                console.error('❌ UIController class not available');
+                document.getElementById('status').textContent = 'UIController class not available';
+            }
+        } catch (error) {
+            console.error('❌ Error creating UIController:', error);
+            console.error('Error stack:', error.stack);
+            document.getElementById('status').textContent = 'UIController Error: ' + error.message;
+        }
+    </script>
+</body>
+</html>

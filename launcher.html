@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe - Auto Launcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+        <div class="text-center">
+            <h1 class="text-2xl font-bold text-gray-800 mb-4">🎵 PALAScribe</h1>
+            <p class="text-gray-600 mb-6">One-click launcher with auto-backend startup</p>
+            
+            <div id="status" class="mb-6">
+                <div class="flex items-center justify-center space-x-3 mb-3">
+                    <div id="status-indicator" class="w-4 h-4 rounded-full bg-yellow-400 animate-pulse"></div>
+                    <span id="status-text" class="text-gray-700">Checking system...</span>
+                </div>
+                <div id="progress-bar" class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="progress-fill" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <div id="actions" class="space-y-3">
+                <button id="btn-start-backend" class="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                    🔧 Start Whisper Backend First
+                </button>
+                <button id="btn-launch" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors" disabled>
+                    🚀 Launch Application
+                </button>
+                <button id="btn-launch-demo" class="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                    🎭 Launch in Demo Mode
+                </button>
+            </div>
+            
+            <div id="instructions" class="mt-6 p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
+                <h3 class="font-semibold mb-3">🛠️ To Start Whisper Backend:</h3>
+                <div class="space-y-2">
+                    <p><strong>Option 1 (Recommended):</strong> Open Terminal and run:</p>
+                    <code class="bg-gray-200 px-2 py-1 rounded block font-mono">./auto-whisper.sh start</code>
+                    
+                    <p class="mt-3"><strong>Option 2:</strong> Double-click the app bundle:</p>
+                    <code class="bg-gray-200 px-2 py-1 rounded block">Audio-Text-Converter.app</code>
+                    
+                    <p class="mt-3 text-blue-600">💡 <strong>Or use Demo Mode</strong> - works without backend setup!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AutoLauncher {
+            constructor() {
+                this.statusIndicator = document.getElementById('status-indicator');
+                this.statusText = document.getElementById('status-text');
+                this.progressFill = document.getElementById('progress-fill');
+                this.btnLaunch = document.getElementById('btn-launch');
+                this.btnStartBackend = document.getElementById('btn-start-backend');
+                this.instructions = document.getElementById('instructions');
+                
+                this.init();
+            }
+            
+            async init() {
+                this.bindEvents();
+                await this.checkSystem();
+            }
+            
+            bindEvents() {
+                this.btnLaunch.addEventListener('click', () => {
+                    this.launchApplication();
+                });
+                
+                this.btnStartBackend.addEventListener('click', () => {
+                    this.showBackendInstructions();
+                });
+                
+                // Add demo mode button event
+                const btnLaunchDemo = document.getElementById('btn-launch-demo');
+                if (btnLaunchDemo) {
+                    btnLaunchDemo.addEventListener('click', () => {
+                        this.launchApplicationDemo();
+                    });
+                }
+            }
+            
+            async checkSystem() {
+                this.updateStatus('yellow', 'Checking Whisper backend...', 25);
+                
+                try {
+                    const response = await fetch('http://localhost:8000/health', {
+                        method: 'GET',
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    
+                    if (response.ok) {
+                        this.updateStatus('green', 'Backend ready! ✅', 100);
+                        this.btnStartBackend.style.display = 'none';
+                        this.btnLaunch.disabled = false;
+                        this.btnLaunch.textContent = '🚀 Launch Application (Real Processing)';
+                    } else {
+                        this.updateStatus('red', 'Backend not running', 50);
+                        this.showBackendNotRunning();
+                    }
+                } catch (error) {
+                    this.updateStatus('red', 'Backend not running', 50);
+                    this.showBackendNotRunning();
+                }
+            }
+            
+            showBackendNotRunning() {
+                this.btnStartBackend.style.display = 'block';
+                this.btnLaunch.disabled = true;
+                this.btnLaunch.textContent = '🚀 Launch Application (Backend Required)';
+                this.statusText.textContent += ' - Demo mode available';
+            }
+            
+            updateStatus(color, text, progress) {
+                const colors = {
+                    yellow: 'bg-yellow-400 animate-pulse',
+                    green: 'bg-green-500',
+                    red: 'bg-red-500',
+                    purple: 'bg-purple-500'
+                };
+                
+                this.statusIndicator.className = `w-4 h-4 rounded-full ${colors[color]}`;
+                this.statusText.textContent = text;
+                this.progressFill.style.width = `${progress}%`;
+            }
+            
+            showBackendInstructions() {
+                this.instructions.classList.remove('hidden');
+                this.btnStartBackend.textContent = '⏳ Follow instructions above, then refresh';
+                this.btnStartBackend.disabled = true;
+                
+                // Add refresh button
+                const refreshBtn = document.createElement('button');
+                refreshBtn.textContent = '🔄 Check Again';
+                refreshBtn.className = 'w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors mt-2';
+                refreshBtn.addEventListener('click', () => {
+                    this.checkSystem();
+                    this.btnStartBackend.disabled = false;
+                    this.btnStartBackend.textContent = '🔧 Start Whisper Backend First';
+                });
+                
+                const actionsDiv = document.getElementById('actions');
+                if (!document.getElementById('refresh-btn')) {
+                    refreshBtn.id = 'refresh-btn';
+                    actionsDiv.appendChild(refreshBtn);
+                }
+                
+                // Check periodically if backend starts
+                const checkInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch('http://localhost:8000/health');
+                        if (response.ok) {
+                            this.updateStatus('green', 'Backend started! ✅', 100);
+                            this.btnStartBackend.style.display = 'none';
+                            this.btnLaunch.disabled = false;
+                            this.btnLaunch.textContent = '🚀 Launch Application (Real Processing)';
+                            this.instructions.classList.add('hidden');
+                            clearInterval(checkInterval);
+                        }
+                    } catch (error) {
+                        // Still not running
+                    }
+                }, 2000);
+                
+                // Stop checking after 60 seconds
+                setTimeout(() => clearInterval(checkInterval), 60000);
+            }
+            
+            launchApplicationDemo() {
+                // Open the main application in demo mode
+                window.open('index.html', '_blank');
+                this.updateStatus('purple', 'Demo mode launched! ✅', 100);
+                const btnLaunchDemo = document.getElementById('btn-launch-demo');
+                btnLaunchDemo.textContent = '✅ Demo Launched';
+                btnLaunchDemo.disabled = true;
+            }
+            
+            launchApplication() {
+                // Open the main application with autostart parameter
+                window.open('index.html?autostart=true', '_blank');
+                this.updateStatus('green', 'Application launched! ✅', 100);
+                this.btnLaunch.textContent = '✅ Launched';
+                this.btnLaunch.disabled = true;
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AutoLauncher();
+        });
+    </script>
+</body>
+</html>

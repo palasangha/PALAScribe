@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segment Highlighting Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .text-segment {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+            display: inline !important;
+            position: relative;
+        }
+        
+        .text-segment.highlighted-segment {
+            background-color: rgba(34, 197, 94, 0.2) !important; /* Light green */
+            border-left: 3px solid rgb(34, 197, 94) !important; /* green-500 */
+            animation: click-flash 0.3s ease;
+        }
+        
+        .active-segment {
+            background-color: rgba(254, 240, 138, 0.3) !important; /* Very light yellow */
+            border-left: 3px solid rgb(251, 191, 36) !important; /* yellow-400 */
+            transition: all 0.2s ease;
+        }
+
+        .text-segment:hover {
+            background-color: rgba(59, 130, 246, 0.1) !important; /* Very light blue */
+        }
+        
+        @keyframes click-flash {
+            0% { 
+                background-color: rgba(34, 197, 94, 0.4); 
+            }
+            100% { 
+                background-color: rgba(34, 197, 94, 0.2); 
+            }
+        }
+        
+        .editable-test {
+            border: 2px dashed #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body class="p-8">
+    <h1 class="text-2xl font-bold mb-4">Segment Highlighting Test</h1>
+    
+    <div class="mb-4">
+        <button id="start-highlighting" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Start Auto Highlighting
+        </button>
+        <button id="stop-highlighting" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 ml-2">
+            Stop Auto Highlighting
+        </button>
+    </div>
+    
+    <div class="mb-4">
+        <p class="text-sm text-gray-600 mb-2">Try selecting text with mouse while auto-highlighting is running:</p>
+    </div>
+    
+    <div id="text-container" class="border p-4 rounded bg-gray-50 font-mono leading-relaxed">
+        <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+              data-timestamp="0" data-end-timestamp="2" data-segment-id="0" 
+              title="Click to jump to 0:00 - 0:02">
+            This is the first segment of text.
+        </span>
+        <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+              data-timestamp="2" data-end-timestamp="4" data-segment-id="1" 
+              title="Click to jump to 0:02 - 0:04">
+            This is the second segment of text.
+        </span>
+        <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+              data-timestamp="4" data-end-timestamp="6" data-segment-id="2" 
+              title="Click to jump to 0:04 - 0:06">
+            This is the third segment of text.
+        </span>
+        <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+              data-timestamp="6" data-end-timestamp="8" data-segment-id="3" 
+              title="Click to jump to 0:06 - 0:08">
+            This is the fourth segment of text.
+        </span>
+        <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+              data-timestamp="8" data-end-timestamp="10" data-segment-id="4" 
+              title="Click to jump to 0:08 - 0:10">
+            This is the fifth segment of text.
+        </span>
+    </div>
+    
+    <div class="mb-4 mt-6">
+        <h2 class="text-lg font-semibold mb-2">Contenteditable Test (like in review modal):</h2>
+        <div id="editable-container" class="editable-test border p-4 rounded bg-white font-mono leading-relaxed" contenteditable="true">
+            <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+                  data-timestamp="0" data-end-timestamp="2" data-segment-id="0" 
+                  title="Click to jump to 0:00 - 0:02">
+                This is the first segment in editable text.
+            </span>
+            <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+                  data-timestamp="2" data-end-timestamp="4" data-segment-id="1" 
+                  title="Click to jump to 0:02 - 0:04">
+                This is the second segment in editable text.
+            </span>
+            <span class="text-segment cursor-pointer transition-colors rounded px-1 py-0.5 border-l-2 border-transparent" 
+                  data-timestamp="4" data-end-timestamp="6" data-segment-id="2" 
+                  title="Click to jump to 0:04 - 0:06">
+                This is the third segment in editable text.
+            </span>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Try editing this text and selecting portions while highlighting is active</p>
+    </div>
+    
+    <div class="mt-4">
+        <p class="text-sm text-gray-600">Current time: <span id="current-time">0:00</span></p>
+    </div>
+
+    <script>
+        let highlightInterval = null;
+        let currentTime = 0;
+        
+        const textContainer = document.getElementById('text-container');
+        const currentTimeSpan = document.getElementById('current-time');
+        const startBtn = document.getElementById('start-highlighting');
+        const stopBtn = document.getElementById('stop-highlighting');
+        
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '0:00';
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        
+        function highlightCurrentSegment(currentTime, textContainer) {
+            if (!textContainer) return;
+
+            const segments = textContainer.querySelectorAll('.text-segment');
+            let activeSegment = null;
+
+            // Find the segment that contains the current time
+            segments.forEach(segment => {
+                const startTime = parseFloat(segment.dataset.timestamp) || 0;
+                const endTime = parseFloat(segment.dataset.endTimestamp) || startTime + 1;
+                
+                // Remove previous highlighting - be very specific about classes
+                segment.classList.remove('active-segment');
+                segment.style.removeProperty('background-color');
+                segment.style.removeProperty('border-left');
+                
+                // Check if current time falls within this segment
+                if (currentTime >= startTime && currentTime <= endTime) {
+                    activeSegment = segment;
+                }
+            });
+
+            // Highlight the active segment with subtle styling
+            if (activeSegment) {
+                activeSegment.classList.add('active-segment');
+            }
+        }
+        
+        function setupTextSegmentHandlers(container) {
+            container.addEventListener('click', (e) => {
+                // Ignore clicks if text is being selected
+                const selection = window.getSelection();
+                if (selection && selection.toString().length > 0) {
+                    return; // Don't interfere with text selection
+                }
+
+                const clickedElement = e.target;
+                
+                // Check if clicked element has a timestamp data attribute
+                if (clickedElement.classList.contains('text-segment') && clickedElement.dataset.timestamp) {
+                    const timestamp = parseFloat(clickedElement.dataset.timestamp);
+                    if (!isNaN(timestamp)) {
+                        currentTime = timestamp;
+                        currentTimeSpan.textContent = formatTime(currentTime);
+                        
+                        // Remove existing highlights from all segments
+                        const allSegments = container.querySelectorAll('.highlighted-segment');
+                        allSegments.forEach(el => {
+                            el.classList.remove('highlighted-segment');
+                            el.style.removeProperty('background-color');
+                            el.style.removeProperty('border-left');
+                        });
+
+                        // Add highlight to clicked element
+                        clickedElement.classList.add('highlighted-segment');
+                        
+                        // Remove highlight after 2 seconds
+                        setTimeout(() => {
+                            clickedElement.classList.remove('highlighted-segment');
+                        }, 2000);
+                    }
+                }
+            });
+
+            // Handle text selection to avoid conflicts
+            container.addEventListener('mouseup', (e) => {
+                const selection = window.getSelection();
+                if (selection && selection.toString().length > 0) {
+                    // If text is selected, don't trigger segment highlighting
+                    e.stopPropagation();
+                }
+            });
+        }
+        
+        startBtn.addEventListener('click', () => {
+            if (highlightInterval) return;
+            
+            currentTime = 0;
+            highlightInterval = setInterval(() => {
+                currentTime += 0.5; // Advance by 0.5 seconds
+                currentTimeSpan.textContent = formatTime(currentTime);
+                highlightCurrentSegment(currentTime, textContainer);
+                
+                // Reset after 10 seconds
+                if (currentTime >= 10) {
+                    currentTime = 0;
+                }
+            }, 500);
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            if (highlightInterval) {
+                clearInterval(highlightInterval);
+                highlightInterval = null;
+            }
+            
+            // Clear all highlights
+            const segments = textContainer.querySelectorAll('.text-segment');
+            segments.forEach(segment => {
+                segment.classList.remove('active-segment');
+            });
+            
+            currentTime = 0;
+            currentTimeSpan.textContent = formatTime(currentTime);
+        });
+        
+        // Add click handlers for segments in both containers
+        setupTextSegmentHandlers(textContainer);
+        setupTextSegmentHandlers(document.getElementById('editable-container'));
+        
+        // Regular container click handler (old logic kept for comparison)
+        textContainer.addEventListener('click', (e) => {
+            const clickedElement = e.target;
+            
+            if (clickedElement.dataset.timestamp) {
+                const timestamp = parseFloat(clickedElement.dataset.timestamp);
+                if (!isNaN(timestamp)) {
+                    currentTime = timestamp;
+                    currentTimeSpan.textContent = formatTime(currentTime);
+                    
+                    // Remove existing highlights
+                    const existingHighlights = textContainer.querySelectorAll('.highlighted-segment');
+                    existingHighlights.forEach(el => {
+                        el.classList.remove('highlighted-segment');
+                    });
+
+                    // Add highlight to clicked element
+                    clickedElement.classList.add('highlighted-segment');
+                    
+                    // Remove highlight after 2 seconds
+                    setTimeout(() => {
+                        clickedElement.classList.remove('highlighted-segment');
+                    }, 2000);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
