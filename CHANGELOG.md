@@ -1,8 +1,42 @@
 # PALAScribe Changelog
 
-## Version 1.2.0 - Enhanced Documentation & Onboarding (Latest)
+## Version 1.2.1 - Streamlined Experience (Latest)
+
+### 🎯 User Experience Improvements
+- **REMOVED**: First-time user onboarding flow (simplified startup)
+- **IMPROVED**: Direct access to core functionality without setup wizards
+- **ENHANCED**: Cleaner application startup without welcome modals
+
+### 🔧 Port Configuration Fixes
+- **FIXED**: Server port consistency (standardized on 8765)
+- **UPDATED**: Auto-startup script to use correct port
+- **IMPROVED**: Documentation accuracy for port configuration
+
+### 🐛 Bug Fixes
+
+- **FIXED**: "UIController is not defined" critical startup error
+- **FIXED**: "this.initTableSorting is not a function" error during application initialization  
+- **FIXED**: "uiController.downloadTranscription is not a function" error when clicking download buttons
+- **FIXED**: "uiController.deleteProject is not a function" error when clicking delete buttons
+- **FIXED**: "this.saveDraft is not a function" error when saving draft transcriptions
+- **FIXED**: "this.updateWordCount is not a function" error when opening projects
+- **ADDED**: Missing `initTableSorting()`, `sortTable()`, and `initRowSelection()` methods for table functionality
+- **ADDED**: Missing `downloadTranscription()` method for project-specific downloads
+- **ADDED**: Missing `deleteProject()` method for individual project deletion
+- **ADDED**: Missing `saveDraft()`, `resetToOriginalText()`, and `updateWordCount()` methods in UIController
+- **IMPROVED**: Script loading coordination between ui-controller-fixed.js and app.js
+- **IMPROVED**: Transcription editing reliability and error handling
+- **IMPLEMENTED**: Proper DOCX export functionality with valid XML structure
+- **FIXED**: Export DOCX button now creates proper Word-compatible documents
+- **ADDED**: RTF fallback format for maximum Word compatibility
+- **ENHANCED**: Document export includes comprehensive project metadata
+
+---
+
+## Version 1.2.0 - Enhanced Documentation & Onboarding
 
 ### 📚 Documentation Improvements
+
 - **NEW**: Comprehensive `QUICK_START_GUIDE.md` for 5-minute setup
 - **ENHANCED**: `README.md` with detailed local Whisper setup instructions
 - **NEW**: `SYSTEM_ARCHITECTURE_DIAGRAMS.md` with ASCII system diagrams

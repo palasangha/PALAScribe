@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe Multi-User Architecture - Full Test Suite</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        .project-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        .project-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-output {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-new { background-color: #e9ecef; color: #495057; }
+        .status-processing { background-color: #fff3cd; color: #856404; }
+        .status-completed { background-color: #d4edda; color: #155724; }
+        .status-failed { background-color: #f8d7da; color: #721c24; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 PALAScribe Multi-User Architecture - Full Test Suite</h1>
+        <p>Comprehensive testing of the new server-based architecture with database persistence and transcription capabilities.</p>
+        
+        <div class="test-section info">
+            <h3>🔌 Server Connection & Health Check</h3>
+            <div id="server-status">Testing server connection...</div>
+            <button onclick="testServerConnection()">Test Connection</button>
+            <button onclick="runAllTests()" class="btn-success">Run All Tests</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>📊 Project Management Tests</h2>
+        
+        <div class="grid">
+            <div class="test-section">
+                <h3>➕ Create Projects</h3>
+                <input type="text" id="project-name" placeholder="Project Name" value="Test Project">
+                <input type="text" id="assigned-to" placeholder="Assigned To" value="Test User">
+                <button onclick="createProject()">Create Project</button>
+                <button onclick="createDuplicateProjects()">Test Deduplication</button>
+                <div id="create-result" class="log-output"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🗑️ Delete Project</h3>
+                <input type="text" id="delete-project-id" placeholder="Project ID to delete">
+                <button onclick="deleteProject()" class="btn-danger">Delete Project</button>
+                <button onclick="deleteAllTestProjects()" class="btn-danger">Delete All Test Projects</button>
+                <div id="delete-result" class="log-output"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Projects List & Management</h3>
+            <button onclick="refreshProjects()">Refresh Projects</button>
+            <button onclick="createSampleProjects()">Create Sample Projects</button>
+            <div id="projects-list" class="project-list">No projects loaded yet.</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🎵 Audio Processing & Transcription Tests</h2>
+        
+        <div class="grid">
+            <div class="test-section">
+                <h3>📁 Upload Audio File</h3>
+                <input type="text" id="upload-project-id" placeholder="Project ID for audio upload">
+                <input type="file" id="audio-file" accept="audio/*">
+                <button onclick="uploadAudio()">Upload Audio</button>
+                <div id="upload-result" class="log-output"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🎙️ Transcription Settings</h3>
+                <input type="text" id="transcribe-project-id" placeholder="Project ID to transcribe">
+                <div>
+                    <label>Model:</label>
+                    <select id="transcribe-model">
+                        <option value="tiny">Tiny (fastest)</option>
+                        <option value="base">Base</option>
+                        <option value="small">Small</option>
+                        <option value="medium" selected>Medium (default)</option>
+                        <option value="large">Large (best quality)</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Language:</label>
+                    <select id="transcribe-language">
+                        <option value="English" selected>English</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
+                        <option value="auto">Auto-detect</option>
+                    </select>
+                </div>
+                <div>
+                    <label>
+                        <input type="checkbox" id="preview-mode"> Preview Mode (60 seconds only)
+                    </label>
+                </div>
+                <button onclick="startTranscription()">Start Transcription</button>
+                <div id="transcription-result" class="log-output"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Advanced Functionality Tests</h2>
+        
+        <div class="grid">
+            <div class="test-section">
+                <h3>🔄 Complete Workflow Test</h3>
+                <p>Tests the full project lifecycle: create → upload → transcribe → delete</p>
+                <button onclick="runCompleteWorkflow()" class="btn-success">Run Complete Workflow</button>
+                <div id="workflow-result" class="log-output"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🎯 API Endpoint Tests</h3>
+                <p>Tests all REST API endpoints for proper responses</p>
+                <button onclick="testAllEndpoints()">Test All Endpoints</button>
+                <div id="api-tests" class="log-output"></div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="test-section">
+                <h3>📊 Database Operations</h3>
+                <p>Tests database persistence and integrity</p>
+                <button onclick="testDatabaseOperations()">Test Database</button>
+                <div id="database-tests" class="log-output"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>🔗 Multi-User Scenarios</h3>
+                <p>Tests concurrent operations and data isolation</p>
+                <button onclick="testMultiUserScenarios()">Test Multi-User</button>
+                <div id="multiuser-tests" class="log-output"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📈 Performance & Stress Tests</h3>
+            <p>Tests system performance under load</p>
+            <button onclick="runPerformanceTests()">Run Performance Tests</button>
+            <button onclick="runStressTest()">Run Stress Test</button>
+            <div id="performance-tests" class="log-output"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8765';
+        let projectCount = 0;
+        let testResults = {
+            passed: 0,
+            failed: 0,
+            total: 0
+        };
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            element.textContent += logMessage;
+            element.scrollTop = element.scrollHeight;
+            
+            console.log(`${type.toUpperCase()}: ${message}`);
+        }
+
+        function logTest(elementId, testName, passed, details = '') {
+            testResults.total++;
+            if (passed) {
+                testResults.passed++;
+                log(elementId, `✅ ${testName}: PASS ${details}`, 'success');
+            } else {
+                testResults.failed++;
+                log(elementId, `❌ ${testName}: FAIL ${details}`, 'error');
+            }
+        }
+
+        async function testServerConnection() {
+            const statusDiv = document.getElementById('server-status');
+            
+            try {
+                statusDiv.innerHTML = '⏳ Testing connection...';
+                
+                const response = await fetch(`${API_BASE}/health`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Server is running!<br>
+                            Service: ${data.service}<br>
+                            Status: ${data.status}<br>
+                            Port: 8765
+                        </div>
+                    `;
+                    return true;
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Server connection failed: ${error.message}<br>
+                        Make sure the PALAScribe server is running on port 8765
+                    </div>
+                `;
+                return false;
+            }
+        }
+
+        async function createProject() {
+            const name = document.getElementById('project-name').value;
+            const assignedTo = document.getElementById('assigned-to').value;
+            
+            if (!name.trim()) {
+                log('create-result', 'Project name is required', 'error');
+                return null;
+            }
+
+            try {
+                log('create-result', `Creating project: ${name}`);
+                
+                const response = await fetch(`${API_BASE}/projects`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        assignedTo: assignedTo
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('create-result', `✅ Project created successfully!`);
+                    log('create-result', `Project ID: ${data.id}`);
+                    log('create-result', `Name: ${data.name}`);
+                    log('create-result', `Status: ${data.status}`);
+                    
+                    // Auto-refresh project list
+                    refreshProjects();
+                    
+                    // Update form for next test
+                    projectCount++;
+                    document.getElementById('project-name').value = `Test Project ${projectCount + 1}`;
+                    
+                    return data;
+                } else {
+                    log('create-result', `❌ Failed to create project: ${data.error}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                log('create-result', `❌ Error creating project: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function createDuplicateProjects() {
+            const baseName = document.getElementById('project-name').value || 'Duplicate Test';
+            
+            log('create-result', `Testing name deduplication with base name: ${baseName}`);
+            
+            // Create 3 projects with the same name
+            for (let i = 0; i < 3; i++) {
+                document.getElementById('project-name').value = baseName;
+                await createProject();
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+            }
+            
+            log('create-result', '✅ Deduplication test complete - check project names');
+        }
+
+        async function createSampleProjects() {
+            const sampleProjects = [
+                { name: 'Meditation Session 1', assignedTo: 'John Doe' },
+                { name: 'Dharma Talk', assignedTo: 'Jane Smith' },
+                { name: 'Pali Chanting', assignedTo: 'Bob Wilson' },
+                { name: 'Discussion Group', assignedTo: 'Alice Brown' }
+            ];
+
+            log('create-result', 'Creating sample projects...');
+            
+            for (const project of sampleProjects) {
+                document.getElementById('project-name').value = project.name;
+                document.getElementById('assigned-to').value = project.assignedTo;
+                await createProject();
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            log('create-result', '✅ Sample projects created');
+        }
+
+        async function refreshProjects() {
+            try {
+                const response = await fetch(`${API_BASE}/projects`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const projects = data.projects || [];
+                    displayProjects(projects);
+                    return projects;
+                } else {
+                    log('projects-list', `❌ Failed to fetch projects: ${data.error}`, 'error');
+                    return [];
+                }
+            } catch (error) {
+                log('projects-list', `❌ Error fetching projects: ${error.message}`, 'error');
+                return [];
+            }
+        }
+
+        function displayProjects(projects) {
+            const listDiv = document.getElementById('projects-list');
+            
+            if (projects.length === 0) {
+                listDiv.innerHTML = '<div class="info">No projects found.</div>';
+                return;
+            }
+
+            listDiv.innerHTML = projects.map(project => `
+                <div class="project-item">
+                    <div>
+                        <strong>${project.name}</strong><br>
+                        <small>ID: ${project.id.substring(0, 8)}...</small><br>
+                        <small>Created: ${new Date(project.created).toLocaleString()}</small><br>
+                        ${project.assigned_to ? `<small>Assigned: ${project.assigned_to}</small><br>` : ''}
+                        ${project.audio_file_name ? `<small>Audio: ${project.audio_file_name}</small><br>` : ''}
+                        ${project.word_count ? `<small>Words: ${project.word_count}</small><br>` : ''}
+                    </div>
+                    <div>
+                        <span class="status-badge status-${project.status}">${project.status}</span><br>
+                        <button onclick="viewProject('${project.id}')" style="margin-top: 5px; font-size: 12px; padding: 5px 10px;">View</button>
+                        <button onclick="deleteProjectById('${project.id}')" class="btn-danger" style="margin-top: 5px; font-size: 12px; padding: 5px 10px;">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function viewProject(projectId) {
+            try {
+                const response = await fetch(`${API_BASE}/projects/${projectId}`);
+                const project = await response.json();
+                
+                if (response.ok) {
+                    const details = `
+Project Details:
+- ID: ${project.id}
+- Name: ${project.name}
+- Status: ${project.status}
+- Created: ${new Date(project.created).toLocaleString()}
+- Updated: ${new Date(project.updated).toLocaleString()}
+- Assigned To: ${project.assigned_to || 'None'}
+- Audio File: ${project.audio_file_name || 'None'}
+- Word Count: ${project.word_count || 0}
+- Processing Time: ${project.processing_time || 0}s
+- Transcription: ${project.transcription ? project.transcription.substring(0, 200) + '...' : 'None'}
+                    `;
+                    alert(details);
+                } else {
+                    alert(`Failed to fetch project: ${project.error}`);
+                }
+            } catch (error) {
+                alert(`Error fetching project: ${error.message}`);
+            }
+        }
+
+        async function deleteProject() {
+            const projectId = document.getElementById('delete-project-id').value;
+            
+            if (!projectId.trim()) {
+                log('delete-result', 'Project ID is required', 'error');
+                return;
+            }
+
+            await deleteProjectById(projectId);
+        }
+
+        async function deleteProjectById(projectId) {
+            try {
+                log('delete-result', `Deleting project: ${projectId}`);
+                
+                const response = await fetch(`${API_BASE}/projects/${projectId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('delete-result', `✅ Project deleted successfully!`);
+                    refreshProjects();
+                    return true;
+                } else {
+                    log('delete-result', `❌ Failed to delete project: ${data.error}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('delete-result', `❌ Error deleting project: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function deleteAllTestProjects() {
+            try {
+                const projects = await refreshProjects();
+                const testProjects = projects.filter(p => 
+                    p.name.includes('Test') || 
+                    p.name.includes('Duplicate') || 
+                    p.name.includes('Sample') ||
+                    p.name.includes('Workflow') ||
+                    p.name.includes('API Test')
+                );
+                
+                log('delete-result', `Found ${testProjects.length} test projects to delete`);
+                
+                for (const project of testProjects) {
+                    await deleteProjectById(project.id);
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                log('delete-result', '✅ All test projects deleted');
+            } catch (error) {
+                log('delete-result', `❌ Error deleting test projects: ${error.message}`, 'error');
+            }
+        }
+
+        async function uploadAudio() {
+            const projectId = document.getElementById('upload-project-id').value;
+            const fileInput = document.getElementById('audio-file');
+            
+            if (!projectId.trim()) {
+                log('upload-result', 'Project ID is required', 'error');
+                return false;
+            }
+
+            if (!fileInput.files.length) {
+                log('upload-result', 'Please select an audio file', 'error');
+                return false;
+            }
+
+            const file = fileInput.files[0];
+            
+            try {
+                log('upload-result', `Uploading audio file: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+                
+                const formData = new FormData();
+                formData.append('audio', file);
+                
+                const response = await fetch(`${API_BASE}/projects/${projectId}/audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('upload-result', `✅ Audio uploaded successfully!`);
+                    log('upload-result', `File: ${data.filename}`);
+                    log('upload-result', `Path: ${data.file_path}`);
+                    refreshProjects();
+                    return true;
+                } else {
+                    log('upload-result', `❌ Failed to upload audio: ${data.error}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('upload-result', `❌ Error uploading audio: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function startTranscription() {
+            const projectId = document.getElementById('transcribe-project-id').value;
+            const model = document.getElementById('transcribe-model').value;
+            const language = document.getElementById('transcribe-language').value;
+            const preview = document.getElementById('preview-mode').checked;
+            
+            if (!projectId.trim()) {
+                log('transcription-result', 'Project ID is required', 'error');
+                return false;
+            }
+
+            try {
+                log('transcription-result', `Starting transcription for project: ${projectId}`);
+                log('transcription-result', `Model: ${model}, Language: ${language}, Preview: ${preview}`);
+                
+                const response = await fetch(`${API_BASE}/projects/${projectId}/transcribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        language: language,
+                        preview: preview,
+                        previewDuration: 60
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('transcription-result', `✅ Transcription completed!`);
+                    log('transcription-result', `Word count: ${data.word_count}`);
+                    log('transcription-result', `Processing time: ${data.processing_time.toFixed(2)}s`);
+                    log('transcription-result', `Preview mode: ${data.preview_mode}`);
+                    log('transcription-result', `Transcription preview: ${data.transcription.substring(0, 200)}...`);
+                    refreshProjects();
+                    return true;
+                } else {
+                    log('transcription-result', `❌ Transcription failed: ${data.error}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log('transcription-result', `❌ Error starting transcription: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function runCompleteWorkflow() {
+            log('workflow-result', '🚀 Starting complete workflow test...');
+            let testsPassed = 0;
+            let totalTests = 4;
+            
+            try {
+                // Step 1: Create project
+                log('workflow-result', '📝 Step 1: Creating test project...');
+                const createResponse = await fetch(`${API_BASE}/projects`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: `Workflow Test ${Date.now()}`,
+                        assignedTo: 'Workflow Tester'
+                    })
+                });
+                
+                const project = await createResponse.json();
+                if (!createResponse.ok) throw new Error(`Create failed: ${project.error}`);
+                
+                log('workflow-result', `✅ Project created: ${project.id}`);
+                testsPassed++;
+                
+                // Step 2: Update project
+                log('workflow-result', '📝 Step 2: Updating project...');
+                const updateResponse = await fetch(`${API_BASE}/projects/${project.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'processing',
+                        assigned_to: 'Updated User'
+                    })
+                });
+                
+                if (!updateResponse.ok) throw new Error('Update failed');
+                log('workflow-result', '✅ Project updated successfully');
+                testsPassed++;
+                
+                // Step 3: Verify project
+                log('workflow-result', '📝 Step 3: Verifying project...');
+                const getResponse = await fetch(`${API_BASE}/projects/${project.id}`);
+                const updatedProject = await getResponse.json();
+                
+                if (!getResponse.ok) throw new Error('Get failed');
+                if (updatedProject.assigned_to !== 'Updated User') {
+                    throw new Error('Update verification failed');
+                }
+                log('workflow-result', '✅ Project verification successful');
+                testsPassed++;
+                
+                // Step 4: Clean up
+                log('workflow-result', '📝 Step 4: Cleaning up...');
+                const deleteResponse = await fetch(`${API_BASE}/projects/${project.id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!deleteResponse.ok) throw new Error('Delete failed');
+                log('workflow-result', '✅ Project deleted successfully');
+                testsPassed++;
+                
+                log('workflow-result', `🎉 Complete workflow test PASSED! (${testsPassed}/${totalTests} tests passed)`);
+                refreshProjects();
+                return true;
+                
+            } catch (error) {
+                log('workflow-result', `❌ Workflow test FAILED: ${error.message} (${testsPassed}/${totalTests} tests passed)`, 'error');
+                return false;
+            }
+        }
+
+        async function testAllEndpoints() {
+            log('api-tests', '🧪 Testing all API endpoints...');
+            let testsPassed = 0;
+            
+            const endpoints = [
+                { method: 'GET', path: '/health', description: 'Health check' },
+                { method: 'GET', path: '/projects', description: 'List projects' },
+                { method: 'POST', path: '/projects', description: 'Create project', 
+                  body: { name: 'API Test Project', assignedTo: 'API Tester' } }
+            ];
+
+            for (const endpoint of endpoints) {
+                try {
+                    log('api-tests', `Testing ${endpoint.method} ${endpoint.path}...`);
+                    
+                    const options = {
+                        method: endpoint.method,
+                        headers: { 'Content-Type': 'application/json' }
+                    };
+                    
+                    if (endpoint.body) {
+                        options.body = JSON.stringify(endpoint.body);
+                    }
+                    
+                    const response = await fetch(`${API_BASE}${endpoint.path}`, options);
+                    
+                    if (response.ok) {
+                        log('api-tests', `✅ ${endpoint.description}: SUCCESS`);
+                        testsPassed++;
+                    } else {
+                        log('api-tests', `❌ ${endpoint.description}: HTTP ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    log('api-tests', `❌ ${endpoint.description}: ${error.message}`, 'error');
+                }
+            }
+            
+            log('api-tests', `🏁 API endpoint testing complete (${testsPassed}/${endpoints.length} passed)`);
+            refreshProjects();
+            return testsPassed === endpoints.length;
+        }
+
+        async function testDatabaseOperations() {
+            log('database-tests', '🗄️ Testing database operations...');
+            let testsPassed = 0;
+            let totalTests = 3;
+            
+            try {
+                // Test 1: Create with deduplication
+                log('database-tests', 'Test 1: Project name deduplication...');
+                
+                const baseName = 'Database Test Project';
+                const projects = [];
+                
+                // Create 3 projects with the same name
+                for (let i = 0; i < 3; i++) {
+                    const response = await fetch(`${API_BASE}/projects`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: baseName, assignedTo: 'DB Tester' })
+                    });
+                    
+                    const project = await response.json();
+                    if (response.ok) {
+                        projects.push(project);
+                        log('database-tests', `Created: ${project.name}`);
+                    }
+                }
+                
+                // Verify names are unique
+                const names = projects.map(p => p.name);
+                const uniqueNames = [...new Set(names)];
+                
+                if (uniqueNames.length === projects.length) {
+                    log('database-tests', '✅ Test 1: Name deduplication working correctly');
+                    testsPassed++;
+                } else {
+                    log('database-tests', '❌ Test 1: Name deduplication failed', 'error');
+                }
+                
+                // Test 2: Project persistence
+                log('database-tests', 'Test 2: Project persistence...');
+                const firstProject = projects[0];
+                const getResponse = await fetch(`${API_BASE}/projects/${firstProject.id}`);
+                const retrievedProject = await getResponse.json();
+                
+                if (getResponse.ok && retrievedProject.name === firstProject.name) {
+                    log('database-tests', '✅ Test 2: Project persistence working correctly');
+                    testsPassed++;
+                } else {
+                    log('database-tests', '❌ Test 2: Project persistence failed', 'error');
+                }
+                
+                // Test 3: Project updates
+                log('database-tests', 'Test 3: Project updates...');
+                const updateResponse = await fetch(`${API_BASE}/projects/${firstProject.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'completed', assigned_to: 'Updated Tester' })
+                });
+                
+                if (updateResponse.ok) {
+                    const updatedProject = await updateResponse.json();
+                    if (updatedProject.status === 'completed' && updatedProject.assigned_to === 'Updated Tester') {
+                        log('database-tests', '✅ Test 3: Project updates working correctly');
+                        testsPassed++;
+                    } else {
+                        log('database-tests', '❌ Test 3: Project update verification failed', 'error');
+                    }
+                } else {
+                    log('database-tests', '❌ Test 3: Project update failed', 'error');
+                }
+                
+                // Clean up test projects
+                for (const project of projects) {
+                    await fetch(`${API_BASE}/projects/${project.id}`, { method: 'DELETE' });
+                }
+                
+                log('database-tests', `✅ Database operations test complete (${testsPassed}/${totalTests} passed)`);
+                refreshProjects();
+                return testsPassed === totalTests;
+                
+            } catch (error) {
+                log('database-tests', `❌ Database test failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testMultiUserScenarios() {
+            log('multiuser-tests', '👥 Testing multi-user scenarios...');
+            let testsPassed = 0;
+            let totalTests = 2;
+            
+            try {
+                // Test 1: Concurrent project creation
+                log('multiuser-tests', 'Test 1: Concurrent project creation...');
+                
+                const promises = [];
+                for (let i = 0; i < 5; i++) {
+                    promises.push(
+                        fetch(`${API_BASE}/projects`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: `Concurrent Project ${i + 1}`,
+                                assignedTo: `User ${i + 1}`
+                            })
+                        })
+                    );
+                }
+                
+                const responses = await Promise.all(promises);
+                const projects = await Promise.all(responses.map(r => r.json()));
+                
+                const successfulCreations = projects.filter(p => p.id).length;
+                if (successfulCreations === 5) {
+                    log('multiuser-tests', '✅ Test 1: Concurrent creation successful');
+                    testsPassed++;
+                } else {
+                    log('multiuser-tests', `❌ Test 1: Only ${successfulCreations}/5 concurrent creations succeeded`, 'error');
+                }
+                
+                // Test 2: Data isolation (different users, same project names)
+                log('multiuser-tests', 'Test 2: Data isolation...');
+                
+                const sameName = 'Shared Project Name';
+                const user1Project = await fetch(`${API_BASE}/projects`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: sameName, assignedTo: 'User A' })
+                }).then(r => r.json());
+                
+                const user2Project = await fetch(`${API_BASE}/projects`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: sameName, assignedTo: 'User B' })
+                }).then(r => r.json());
+                
+                if (user1Project.id !== user2Project.id && 
+                    user1Project.assigned_to !== user2Project.assigned_to) {
+                    log('multiuser-tests', '✅ Test 2: Data isolation working correctly');
+                    testsPassed++;
+                } else {
+                    log('multiuser-tests', '❌ Test 2: Data isolation failed', 'error');
+                }
+                
+                // Clean up
+                const allProjects = [...projects.filter(p => p.id), user1Project, user2Project];
+                for (const project of allProjects) {
+                    if (project.id) {
+                        await fetch(`${API_BASE}/projects/${project.id}`, { method: 'DELETE' });
+                    }
+                }
+                
+                log('multiuser-tests', `✅ Multi-user scenarios test complete (${testsPassed}/${totalTests} passed)`);
+                refreshProjects();
+                return testsPassed === totalTests;
+                
+            } catch (error) {
+                log('multiuser-tests', `❌ Multi-user test failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function runPerformanceTests() {
+            log('performance-tests', '📈 Running performance tests...');
+            
+            // Test response times
+            const iterations = 10;
+            const times = [];
+            
+            for (let i = 0; i < iterations; i++) {
+                const start = performance.now();
+                await fetch(`${API_BASE}/health`);
+                const end = performance.now();
+                times.push(end - start);
+            }
+            
+            const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+            const maxTime = Math.max(...times);
+            const minTime = Math.min(...times);
+            
+            log('performance-tests', `Health check performance:`);
+            log('performance-tests', `  Average: ${avgTime.toFixed(2)}ms`);
+            log('performance-tests', `  Min: ${minTime.toFixed(2)}ms`);
+            log('performance-tests', `  Max: ${maxTime.toFixed(2)}ms`);
+            
+            if (avgTime < 100) {
+                log('performance-tests', '✅ Performance test PASSED (avg < 100ms)');
+            } else {
+                log('performance-tests', '⚠️ Performance test WARNING (avg >= 100ms)', 'warning');
+            }
+        }
+
+        async function runStressTest() {
+            log('performance-tests', '🔥 Running stress test...');
+            
+            const concurrentRequests = 20;
+            const promises = [];
+            
+            const start = performance.now();
+            
+            for (let i = 0; i < concurrentRequests; i++) {
+                promises.push(
+                    fetch(`${API_BASE}/projects`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: `Stress Test Project ${i}`,
+                            assignedTo: 'Stress Tester'
+                        })
+                    })
+                );
+            }
+            
+            const responses = await Promise.all(promises);
+            const end = performance.now();
+            
+            const successful = responses.filter(r => r.ok).length;
+            const totalTime = end - start;
+            
+            log('performance-tests', `Stress test results:`);
+            log('performance-tests', `  Requests: ${concurrentRequests}`);
+            log('performance-tests', `  Successful: ${successful}`);
+            log('performance-tests', `  Total time: ${totalTime.toFixed(2)}ms`);
+            log('performance-tests', `  Avg per request: ${(totalTime / concurrentRequests).toFixed(2)}ms`);
+            
+            // Clean up stress test projects
+            const projects = await Promise.all(responses.map(r => r.ok ? r.json() : null));
+            for (const project of projects) {
+                if (project && project.id) {
+                    await fetch(`${API_BASE}/projects/${project.id}`, { method: 'DELETE' });
+                }
+            }
+            
+            if (successful >= concurrentRequests * 0.9) {
+                log('performance-tests', '✅ Stress test PASSED (90%+ success rate)');
+            } else {
+                log('performance-tests', '❌ Stress test FAILED (< 90% success rate)', 'error');
+            }
+            
+            refreshProjects();
+        }
+
+        async function runAllTests() {
+            log('server-status', '🧪 Running comprehensive test suite...');
+            
+            // Reset test results
+            testResults = { passed: 0, failed: 0, total: 0 };
+            
+            // Clear all log outputs
+            const logElements = ['create-result', 'delete-result', 'upload-result', 'transcription-result',
+                               'workflow-result', 'api-tests', 'database-tests', 'multiuser-tests', 'performance-tests'];
+            logElements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = '';
+            });
+            
+            const statusDiv = document.getElementById('server-status');
+            statusDiv.innerHTML = '<div class="info">🧪 Running comprehensive test suite...</div>';
+            
+            let allTestsPassed = true;
+            
+            try {
+                // Test 1: Server connection
+                const connectionOk = await testServerConnection();
+                if (!connectionOk) {
+                    statusDiv.innerHTML = '<div class="error">❌ Server connection failed - cannot continue tests</div>';
+                    return;
+                }
+                
+                // Test 2: API endpoints
+                const apiTestsOk = await testAllEndpoints();
+                allTestsPassed = allTestsPassed && apiTestsOk;
+                
+                // Test 3: Database operations
+                const dbTestsOk = await testDatabaseOperations();
+                allTestsPassed = allTestsPassed && dbTestsOk;
+                
+                // Test 4: Complete workflow
+                const workflowOk = await runCompleteWorkflow();
+                allTestsPassed = allTestsPassed && workflowOk;
+                
+                // Test 5: Multi-user scenarios
+                const multiUserOk = await testMultiUserScenarios();
+                allTestsPassed = allTestsPassed && multiUserOk;
+                
+                // Test 6: Performance tests
+                await runPerformanceTests();
+                
+                // Final results
+                if (allTestsPassed) {
+                    statusDiv.innerHTML = `
+                        <div class="success">
+                            🎉 All tests PASSED!<br>
+                            PALAScribe server architecture is working correctly.
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="warning">
+                            ⚠️ Some tests FAILED<br>
+                            Check individual test results for details.
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        ❌ Test suite failed: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize the page
+        window.onload = function() {
+            testServerConnection();
+            refreshProjects();
+            
+            // Set default values for testing
+            document.getElementById('project-name').value = 'Test Project 1';
+            document.getElementById('assigned-to').value = 'Test User';
+        };
+    </script>
+</body>
+</html>

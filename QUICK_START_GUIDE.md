@@ -52,7 +52,7 @@ source whisper-env/bin/activate
 python whisper_server.py
 ```
 
-*The server will start on <http://localhost:8000>*
+*The server will start on <http://localhost:8765>*
 
 ### Open the Frontend
 

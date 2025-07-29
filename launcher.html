@@ -89,7 +89,7 @@
                 this.updateStatus('yellow', 'Checking Whisper backend...', 25);
                 
                 try {
-                    const response = await fetch('http://localhost:8000/health', {
+                    const response = await fetch('http://localhost:8765/health', {
                         method: 'GET',
                         signal: AbortSignal.timeout(3000)
                     });
@@ -153,7 +153,7 @@
                 // Check periodically if backend starts
                 const checkInterval = setInterval(async () => {
                     try {
-                        const response = await fetch('http://localhost:8000/health');
+                        const response = await fetch('http://localhost:8765/health');
                         if (response.ok) {
                             this.updateStatus('green', 'Backend started! ✅', 100);
                             this.btnStartBackend.style.display = 'none';

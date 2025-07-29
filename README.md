@@ -1,6 +1,6 @@
 # PALAScribe - Audio-to-Text Converter
 
-A web-based application for converting audio files to text with specialized Pali word recognition, designed for VRI content transcription. Uses local OpenAI Whisper for privacy and offline processing.
+A web-based application for converting audio files to text with specialized Pali word recognition, designed for VRI content transcription. Features a consolidated server architecture with multi-user support, database persistence, and local OpenAI Whisper processing.
 
 ## Features
 
@@ -15,16 +15,23 @@ A web-based application for converting audio files to text with specialized Pali
 - Special formatting for recognized words
 - Extensive built-in Pali dictionary
 
-📊 **Project Management**
-- Create and manage transcription projects
+📊 **Multi-User Project Management**
+- Create and manage transcription projects with database persistence
 - Track project status through workflow stages
 - Search and filter projects
+- User isolation and data persistence across server restarts
 
 📄 **Document Generation**
 - Generate DOCX files from transcriptions
 - Download generated documents
 - Upload reviewed documents
 - Complete review workflow
+
+🏗️ **Consolidated Architecture**
+- Single server handles all functionality (transcription + project management)
+- SQLite database for data persistence
+- RESTful API for all operations
+- No port conflicts or multiple server management
 
 ## Quick Start
 
@@ -87,19 +94,20 @@ chmod +x whisper-setup-guide.sh
    whisper --model medium --language English test-audio.wav
    ```
 
-### 2. Start the Whisper Backend
+### 2. Start the PALAScribe Server
 
-1. **Start the local server**
+1. **Start the consolidated server**
    ```bash
-   # Option 1: Use the provided script
-   ./start-whisper-server.sh
+   # Option 1: Use the provided script (recommended)
+   ./start-palascribe.sh
    
    # Option 2: Start manually
-   python whisper_server.py
+   python3 palascribe_server.py
    ```
 
 2. **Verify the server is running**
    - Server should start on `http://localhost:8765`
+   - All services (transcription + project management) run on this single port
    - Check browser console or visit the URL to confirm
 
 ### 3. Open PALAScribe Application

@@ -47,7 +47,7 @@ If the quick start script doesn't work:
 
 You can test if the backend is working by visiting:
 ```
-http://localhost:8000/health
+http://localhost:8765/health
 ```
 
 You should see a JSON response with status "healthy".
@@ -59,7 +59,7 @@ If the Local Whisper backend is not available, the application will automaticall
 ## Troubleshooting the "Failed to fetch" Error
 
 - **Error: "Failed to process audio: Failed to fetch"**: The backend server is not running
-- **Port already in use**: Another application is using port 8000, kill it or change the port
+- **Port already in use**: Another application is using port 8765, kill it or change the port
 - **CORS issues**: The server includes CORS headers, but make sure you're accessing via http://localhost
 
 ## 🚀 Ready to Use - No More Errors!

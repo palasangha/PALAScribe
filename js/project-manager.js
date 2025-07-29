@@ -13,14 +13,12 @@ class ProjectManager {
             throw new Error(errors.join(', '));
         }
 
-        // Check for duplicate names
-        if (this.getProjectByName(projectData.name)) {
-            throw new Error(CONFIG.ERRORS.DUPLICATE_PROJECT_NAME);
-        }
+        // Generate unique project name if duplicate exists
+        const uniqueName = this.generateUniqueProjectName(projectData.name.trim());
 
         const project = {
             id: UTILS.generateId(),
-            name: projectData.name.trim(),
+            name: uniqueName,
             assignedTo: projectData.assignedTo ? projectData.assignedTo.trim() : '',
             startDate: new Date().toISOString(),
             endDate: null,
@@ -63,6 +61,20 @@ class ProjectManager {
     // Get project by name
     getProjectByName(name) {
         return this.projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+    }
+
+    // Generate unique project name by appending _1, _2, etc. if duplicates exist
+    generateUniqueProjectName(baseName) {
+        let uniqueName = baseName;
+        let counter = 1;
+        
+        // Keep checking for duplicates and incrementing counter
+        while (this.getProjectByName(uniqueName)) {
+            uniqueName = `${baseName}_${counter}`;
+            counter++;
+        }
+        
+        return uniqueName;
     }
 
     // Get all projects

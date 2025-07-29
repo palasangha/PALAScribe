@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Function Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">Delete Function Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test deleteProject Method</h2>
+            
+            <div class="space-y-4">
+                <button id="test-delete-method" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Test deleteProject Method Exists
+                </button>
+                
+                <button id="create-test-projects" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Create Test Projects
+                </button>
+                
+                <button id="list-projects" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    List Current Projects
+                </button>
+                
+                <button id="test-delete-call" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                    Test Delete Call (First Project)
+                </button>
+            </div>
+            
+            <div id="test-results" class="mt-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Test Results:</h3>
+                <div id="results-content">Click buttons above to run tests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load all required scripts -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/pali-dictionary.js?v=20250721n"></script>
+    <script src="js/audio-processor.js?v=20250721l"></script>
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script src="js/ui-controller-fixed.js?v=20250729c"></script>
+    <script src="js/app.js?v=20250723b"></script>
+
+    <script>
+        let testProjectIds = [];
+
+        function log(message, type = 'info') {
+            const resultsContent = document.getElementById('results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-blue-600';
+            resultsContent.innerHTML += `<div class="${color}">${message}</div>`;
+        }
+
+        function clearResults() {
+            document.getElementById('results-content').innerHTML = '';
+        }
+
+        // Wait for everything to load
+        window.addEventListener('load', () => {
+            // Test deleteProject method existence
+            document.getElementById('test-delete-method').addEventListener('click', () => {
+                clearResults();
+                log('Testing deleteProject method...');
+                
+                if (window.uiController && typeof window.uiController.deleteProject === 'function') {
+                    log('✅ deleteProject method is available', 'success');
+                } else {
+                    log('❌ deleteProject method is NOT available', 'error');
+                }
+                
+                if (typeof projectManager !== 'undefined' && typeof projectManager.deleteProject === 'function') {
+                    log('✅ projectManager.deleteProject is available', 'success');
+                } else {
+                    log('❌ projectManager.deleteProject is NOT available', 'error');
+                }
+            });
+
+            // Create test projects
+            document.getElementById('create-test-projects').addEventListener('click', () => {
+                clearResults();
+                log('Creating test projects...');
+                
+                try {
+                    if (typeof projectManager !== 'undefined') {
+                        // Create multiple test projects
+                        for (let i = 1; i <= 3; i++) {
+                            const testProject = {
+                                name: `Test Delete Project ${i}`,
+                                assignedTo: `Test User ${i}`
+                            };
+                            
+                            const project = projectManager.createProject(testProject);
+                            testProjectIds.push(project.id);
+                            
+                            // Add some content
+                            const content = {
+                                transcription: `This is test transcription content for project ${i}.`,
+                                status: 'COMPLETED'
+                            };
+                            projectManager.updateProject(project.id, content);
+                        }
+                        
+                        log(`✅ Created ${testProjectIds.length} test projects`, 'success');
+                        testProjectIds.forEach((id, index) => {
+                            log(`📝 Project ${index + 1} ID: ${id}`, 'info');
+                        });
+                    } else {
+                        log('❌ Cannot create projects - projectManager not available', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Error creating test projects: ${error.message}`, 'error');
+                }
+            });
+
+            // List current projects
+            document.getElementById('list-projects').addEventListener('click', () => {
+                clearResults();
+                log('Listing current projects...');
+                
+                try {
+                    if (typeof projectManager !== 'undefined') {
+                        const projects = projectManager.getAllProjects();
+                        log(`📋 Found ${projects.length} total projects:`, 'info');
+                        
+                        projects.forEach((project, index) => {
+                            log(`${index + 1}. "${project.name}" (ID: ${project.id}, Status: ${project.status})`, 'info');
+                        });
+                        
+                        if (projects.length === 0) {
+                            log('📝 No projects found. Create some test projects first.', 'info');
+                        }
+                    } else {
+                        log('❌ projectManager not available', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Error listing projects: ${error.message}`, 'error');
+                }
+            });
+
+            // Test delete call
+            document.getElementById('test-delete-call').addEventListener('click', () => {
+                clearResults();
+                log('Testing delete call...');
+                
+                try {
+                    if (typeof projectManager !== 'undefined') {
+                        const projects = projectManager.getAllProjects();
+                        
+                        if (projects.length === 0) {
+                            log('❌ No projects available to delete. Create some test projects first.', 'error');
+                            return;
+                        }
+                        
+                        const firstProject = projects[0];
+                        log(`🗑️ Attempting to delete: "${firstProject.name}" (ID: ${firstProject.id})`);
+                        
+                        if (window.uiController && typeof window.uiController.deleteProject === 'function') {
+                            // Note: This will show a confirmation dialog
+                            log('⚠️ About to call deleteProject - you will see a confirmation dialog', 'info');
+                            window.uiController.deleteProject(firstProject.id);
+                            log('✅ Delete method called successfully!', 'success');
+                        } else {
+                            log('❌ deleteProject method not available', 'error');
+                        }
+                    } else {
+                        log('❌ projectManager not available', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Error during delete: ${error.message}`, 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

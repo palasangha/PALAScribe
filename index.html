@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PALAScribe</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/tailwind-minimal.css?v=20250729a">
     <link rel="stylesheet" href="css/styles.css?v=20250722c">
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -414,12 +414,15 @@
     </main>
 
     <!-- Scripts with cache busting for updated workflow -->
+    <!-- Simple DOCX generation library -->
+    <script src="https://unpkg.com/pizzip@3.1.6/dist/pizzip.js"></script>
+    <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    
     <script src="js/config.js?v=20250722b"></script>
     <script src="js/pali-dictionary.js?v=20250721n"></script>
     <script src="js/audio-processor.js?v=20250721l"></script>
-    <script src="js/project-manager.js?v=20250721n"></script>
-    <script src="js/ui-controller-fixed.js?v=20250722i"></script>
-    <script src="js/onboarding.js?v=20250722a"></script>
-    <script src="js/app.js?v=20250722a"></script>
+    <script src="js/project-manager.js?v=20250729g"></script>
+    <script src="js/ui-controller-fixed.js?v=20250729f"></script>
+    <script src="js/app.js?v=20250723b"></script>
 </body>
 </html>

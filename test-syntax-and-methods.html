@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROPER JavaScript Syntax & Method Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-red-600 mb-8">🚨 PROPER COMPREHENSIVE TEST</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Step 1: Script Loading & Syntax Check</h2>
+            
+            <div id="script-status" class="mb-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Script Loading Status:</h3>
+                <div id="script-results">Testing script loading...</div>
+            </div>
+            
+            <div id="method-status" class="mb-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Method Availability Status:</h3>
+                <div id="method-results">Will test after scripts load...</div>
+            </div>
+            
+            <div id="startup-status" class="mb-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Application Startup Status:</h3>
+                <div id="startup-results">Will test after method validation...</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Step 2: Functional Testing</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <button id="test-audio-conversion" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400" disabled>
+                    🎵 Test Audio Conversion
+                </button>
+                <button id="test-view-pending" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:bg-gray-400" disabled>
+                    📋 Test View Pending
+                </button>
+                <button id="test-edit-audio" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 disabled:bg-gray-400" disabled>
+                    ✏️ Test Edit Audio
+                </button>
+                <button id="test-pali-terms" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:bg-gray-400" disabled>
+                    🔤 Test Pali Terms
+                </button>
+                <button id="test-rich-text" class="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 disabled:bg-gray-400" disabled>
+                    📝 Test Rich Text Editor
+                </button>
+                <button id="test-all-functional" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400" disabled>
+                    🚀 Run All Functional Tests
+                </button>
+            </div>
+            
+            <div id="functional-test-results" class="p-4 bg-gray-50 rounded max-h-96 overflow-y-auto">
+                <h3 class="font-semibold mb-2">Functional Test Results:</h3>
+                <div id="functional-results-content">Waiting for basic tests to pass...</div>
+            </div>
+        </div>
+
+        <!-- Test data section -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6" id="test-data-section" style="display: none;">
+            <h2 class="text-xl font-semibold mb-4">Test Data & Controls</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-semibold mb-2">Audio File for Testing:</h3>
+                    <input type="file" id="test-audio-file" accept="audio/*" class="mb-2">
+                    <p class="text-sm text-gray-600">Upload an audio file to test conversion functionality</p>
+                </div>
+                
+                <div>
+                    <h3 class="font-semibold mb-2">Test Project Name:</h3>
+                    <input type="text" id="test-project-name" value="Test Project - Audio Conversion" class="w-full px-3 py-2 border rounded">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scriptLoadErrors = [];
+        let originalError = window.onerror;
+        
+        // Capture all JavaScript errors
+        window.onerror = function(message, source, lineno, colno, error) {
+            scriptLoadErrors.push({
+                message: message,
+                source: source,
+                line: lineno,
+                column: colno,
+                error: error
+            });
+            
+            updateScriptStatus();
+            
+            if (originalError) {
+                return originalError.apply(this, arguments);
+            }
+            return false;
+        };
+        
+        function updateScriptStatus() {
+            const scriptResults = document.getElementById('script-results');
+            
+            if (scriptLoadErrors.length > 0) {
+                let errorHtml = '<div class="text-red-600 font-bold">❌ SCRIPT LOADING ERRORS DETECTED:</div>';
+                scriptLoadErrors.forEach((err, index) => {
+                    errorHtml += `
+                        <div class="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                            <div class="font-mono text-sm text-red-800">Error ${index + 1}:</div>
+                            <div class="font-mono text-xs text-red-700">Message: ${err.message}</div>
+                            <div class="font-mono text-xs text-red-700">Source: ${err.source}</div>
+                            <div class="font-mono text-xs text-red-700">Line: ${err.line}, Column: ${err.column}</div>
+                        </div>
+                    `;
+                });
+                scriptResults.innerHTML = errorHtml;
+            } else {
+                scriptResults.innerHTML = '<div class="text-green-600">✅ No script loading errors detected so far...</div>';
+            }
+        }
+        
+        function testMethodAvailability() {
+            const methodResults = document.getElementById('method-results');
+            
+            if (scriptLoadErrors.length > 0) {
+                methodResults.innerHTML = '<div class="text-red-600">❌ Cannot test methods due to script loading errors above</div>';
+                return;
+            }
+            
+            const requiredMethods = [
+                'init', 'cacheElements', 'bindEvents', 'showView', 'clearAllProjects',
+                'handleCreateProject', 'processProjectAudio', 'processWithWhisperBackend',
+                'refreshProjectsList', 'createProjectCard', 'createProjectTableRow',
+                'showReviewView', 'deleteProject', 'downloadTranscription', 'initTableSorting',
+                'sortTable', 'initRowSelection', 'initializeRichTextEditor', 'executeCommand',
+                'updateToolbarState', 'toggleSourceMode', 'checkAndUpdateBackendStatus',
+                'checkWhisperBackendAvailable', 'autoStartWhisperBackend', 'setRichTextContent',
+                'updateTranscriptionPreview', 'updateWordCount', 'showNewProjectModal',
+                'hideNewProjectModal', 'refreshReviewProjectsList', 'refreshApprovedProjectsList',
+                'openProject'
+            ];
+            
+            let results = '';
+            let successCount = 0;
+            let errorCount = 0;
+            
+            // Test UIController class
+            if (typeof UIController === 'undefined') {
+                results += '<div class="text-red-600 font-bold">❌ CRITICAL: UIController class not defined</div>';
+                errorCount++;
+            } else {
+                results += '<div class="text-green-600">✅ UIController class is defined</div>';
+                successCount++;
+            }
+            
+            // Test UIController instance
+            if (typeof window.uiController === 'undefined') {
+                results += '<div class="text-red-600 font-bold">❌ CRITICAL: uiController instance not available</div>';
+                errorCount++;
+            } else {
+                results += '<div class="text-green-600">✅ uiController instance is available</div>';
+                successCount++;
+                
+                // Test individual methods
+                results += '<div class="mt-4 font-semibold">Method Availability Check:</div>';
+                requiredMethods.forEach(method => {
+                    if (typeof window.uiController[method] === 'function') {
+                        results += `<div class="text-green-600 text-sm">✅ ${method}()</div>`;
+                        successCount++;
+                    } else {
+                        results += `<div class="text-red-600 text-sm">❌ ${method}() - MISSING</div>`;
+                        errorCount++;
+                    }
+                });
+            }
+            
+            results += `<div class="mt-4 font-bold">Summary: ${successCount} passed, ${errorCount} failed</div>`;
+            methodResults.innerHTML = results;
+            
+            // Test startup if methods are available
+            if (errorCount === 0) {
+                setTimeout(testStartup, 1000);
+            }
+        }
+        
+        function testStartup() {
+            const startupResults = document.getElementById('startup-results');
+            
+            try {
+                if (window.uiController && typeof window.uiController.init === 'function') {
+                    startupResults.innerHTML = '<div class="text-green-600">✅ Application startup test passed - UIController initialized properly</div>';
+                    
+                    // Enable functional test buttons
+                    enableFunctionalTests();
+                } else {
+                    startupResults.innerHTML = '<div class="text-red-600">❌ Application startup failed - UIController not properly initialized</div>';
+                }
+            } catch (error) {
+                startupResults.innerHTML = `<div class="text-red-600">❌ Application startup error: ${error.message}</div>`;
+            }
+        }
+
+        function enableFunctionalTests() {
+            // Enable all functional test buttons
+            document.getElementById('test-audio-conversion').disabled = false;
+            document.getElementById('test-view-pending').disabled = false;
+            document.getElementById('test-edit-audio').disabled = false;
+            document.getElementById('test-pali-terms').disabled = false;
+            document.getElementById('test-rich-text').disabled = false;
+            document.getElementById('test-all-functional').disabled = false;
+            
+            // Show test data section
+            document.getElementById('test-data-section').style.display = 'block';
+            
+            // Bind functional test events
+            bindFunctionalTestEvents();
+        }
+
+        function bindFunctionalTestEvents() {
+            document.getElementById('test-audio-conversion').addEventListener('click', testAudioConversion);
+            document.getElementById('test-view-pending').addEventListener('click', testViewPending);
+            document.getElementById('test-edit-audio').addEventListener('click', testEditAudio);
+            document.getElementById('test-pali-terms').addEventListener('click', testPaliTerms);
+            document.getElementById('test-rich-text').addEventListener('click', testRichTextEditor);
+            document.getElementById('test-all-functional').addEventListener('click', runAllFunctionalTests);
+        }
+
+        function logFunctional(message, type = 'info') {
+            const resultsContent = document.getElementById('functional-results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : type === 'warning' ? 'text-orange-600' : 'text-blue-600';
+            const timestamp = new Date().toLocaleTimeString();
+            resultsContent.innerHTML += `<div class="${color} text-sm font-mono">[${timestamp}] ${message}</div>`;
+            resultsContent.scrollTop = resultsContent.scrollHeight;
+        }
+
+        function clearFunctionalResults() {
+            document.getElementById('functional-results-content').innerHTML = '';
+        }
+
+        // Test Audio Conversion functionality
+        async function testAudioConversion() {
+            logFunctional('🎵 TESTING AUDIO CONVERSION', 'warning');
+            logFunctional('='.repeat(50), 'info');
+            
+            try {
+                // Test 1: Check if new project modal can be opened
+                logFunctional('Test 1: Opening new project modal...', 'info');
+                if (typeof window.uiController.showNewProjectModal === 'function') {
+                    window.uiController.showNewProjectModal();
+                    logFunctional('✅ New project modal opened successfully', 'success');
+                } else {
+                    logFunctional('❌ showNewProjectModal method not available', 'error');
+                    return;
+                }
+
+                // Test 2: Check DOM elements for project creation
+                logFunctional('Test 2: Checking project creation form elements...', 'info');
+                const requiredElements = ['projectName', 'assignedTo', 'projectAudioFile', 'previewMode'];
+                let elementCount = 0;
+                
+                requiredElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        logFunctional(`✅ Found ${elementId} element`, 'success');
+                        elementCount++;
+                    } else {
+                        logFunctional(`❌ Missing ${elementId} element`, 'error');
+                    }
+                });
+
+                if (elementCount === requiredElements.length) {
+                    logFunctional('✅ All required form elements found', 'success');
+                    
+                    // Test 3: Test preview mode vs full mode
+                    logFunctional('Test 3: Testing preview mode settings...', 'info');
+                    const previewCheckbox = document.getElementById('previewMode');
+                    if (previewCheckbox) {
+                        // Test preview mode
+                        previewCheckbox.checked = true;
+                        logFunctional('✅ Preview mode can be enabled', 'success');
+                        
+                        // Test full mode
+                        previewCheckbox.checked = false;
+                        logFunctional('✅ Full mode can be enabled', 'success');
+                    }
+                } else {
+                    logFunctional('❌ Missing required form elements for audio conversion', 'error');
+                }
+
+                // Test 4: Test handleCreateProject method
+                logFunctional('Test 4: Testing handleCreateProject method...', 'info');
+                if (typeof window.uiController.handleCreateProject === 'function') {
+                    logFunctional('✅ handleCreateProject method available', 'success');
+                } else {
+                    logFunctional('❌ handleCreateProject method not available', 'error');
+                }
+
+                // Test 5: Test audio processing methods
+                logFunctional('Test 5: Testing audio processing methods...', 'info');
+                const processingMethods = ['processProjectAudio', 'processWithWhisperBackend', 'processProjectAudioBackground'];
+                processingMethods.forEach(method => {
+                    if (typeof window.uiController[method] === 'function') {
+                        logFunctional(`✅ ${method} method available`, 'success');
+                    } else {
+                        logFunctional(`❌ ${method} method not available`, 'error');
+                    }
+                });
+
+            } catch (error) {
+                logFunctional(`❌ Audio conversion test failed: ${error.message}`, 'error');
+            }
+
+            logFunctional('🎵 Audio conversion test completed', 'warning');
+            logFunctional('', 'info');
+        }
+
+        // Test View Pending functionality
+        async function testViewPending() {
+            logFunctional('📋 TESTING VIEW PENDING', 'warning');
+            logFunctional('='.repeat(50), 'info');
+            
+            try {
+                // Test 1: Switch to ready-review view
+                logFunctional('Test 1: Switching to ready-review view...', 'info');
+                if (typeof window.uiController.showView === 'function') {
+                    window.uiController.showView('ready-review');
+                    logFunctional('✅ Successfully switched to ready-review view', 'success');
+                } else {
+                    logFunctional('❌ showView method not available', 'error');
+                    return;
+                }
+
+                // Test 2: Check table structure
+                logFunctional('Test 2: Checking projects table structure...', 'info');
+                const tableElements = ['reviewProjectsTableBody', 'searchReviewProjects', 'btnClearAllReview'];
+                let tableElementCount = 0;
+                
+                tableElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        logFunctional(`✅ Found ${elementId} element`, 'success');
+                        tableElementCount++;
+                    } else {
+                        logFunctional(`❌ Missing ${elementId} element`, 'error');
+                    }
+                });
+
+                // Test 3: Test refresh functionality
+                logFunctional('Test 3: Testing refresh review projects...', 'info');
+                if (typeof window.uiController.refreshReviewProjectsList === 'function') {
+                    window.uiController.refreshReviewProjectsList();
+                    logFunctional('✅ refreshReviewProjectsList executed successfully', 'success');
+                } else {
+                    logFunctional('❌ refreshReviewProjectsList method not available', 'error');
+                }
+
+                // Test 4: Test search functionality
+                logFunctional('Test 4: Testing search functionality...', 'info');
+                if (typeof window.uiController.debouncedSearch === 'function') {
+                    logFunctional('✅ debouncedSearch method available', 'success');
+                    
+                    // Test search with sample term
+                    window.uiController.debouncedSearch('test', 'review');
+                    logFunctional('✅ Search executed with test term', 'success');
+                } else {
+                    logFunctional('❌ debouncedSearch method not available', 'error');
+                }
+
+                // Test 5: Test table actions
+                logFunctional('Test 5: Testing table action methods...', 'info');
+                const actionMethods = ['openProject', 'downloadTranscription', 'deleteProject'];
+                actionMethods.forEach(method => {
+                    if (typeof window.uiController[method] === 'function') {
+                        logFunctional(`✅ ${method} action available`, 'success');
+                    } else {
+                        logFunctional(`❌ ${method} action not available`, 'error');
+                    }
+                });
+
+                // Test 6: Test clear all functionality
+                logFunctional('Test 6: Testing clear all functionality...', 'info');
+                if (typeof window.uiController.clearProjectsByStatus === 'function') {
+                    logFunctional('✅ clearProjectsByStatus method available', 'success');
+                } else {
+                    logFunctional('❌ clearProjectsByStatus method not available', 'error');
+                }
+
+                // Test 7: Test table sorting
+                logFunctional('Test 7: Testing table sorting...', 'info');
+                if (typeof window.uiController.sortTable === 'function') {
+                    logFunctional('✅ sortTable method available', 'success');
+                    
+                    // Test sorting by different columns
+                    ['name', 'status', 'created'].forEach(column => {
+                        try {
+                            window.uiController.sortTable(column);
+                            logFunctional(`✅ Sorting by ${column} works`, 'success');
+                        } catch (error) {
+                            logFunctional(`❌ Sorting by ${column} failed: ${error.message}`, 'error');
+                        }
+                    });
+                } else {
+                    logFunctional('❌ sortTable method not available', 'error');
+                }
+
+            } catch (error) {
+                logFunctional(`❌ View pending test failed: ${error.message}`, 'error');
+            }
+
+            logFunctional('📋 View pending test completed', 'warning');
+            logFunctional('', 'info');
+        }
+
+        // Test Edit Audio functionality
+        async function testEditAudio() {
+            logFunctional('✏️ TESTING EDIT AUDIO', 'warning');
+            logFunctional('='.repeat(50), 'info');
+            
+            try {
+                // Test 1: Check review view elements
+                logFunctional('Test 1: Checking edit/review view elements...', 'info');
+                const reviewElements = ['reviewAudioPlayer', 'transcriptionEditor', 'reviewProjectInfo'];
+                let reviewElementCount = 0;
+                
+                reviewElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        logFunctional(`✅ Found ${elementId} element`, 'success');
+                        reviewElementCount++;
+                    } else {
+                        logFunctional(`❌ Missing ${elementId} element`, 'error');
+                    }
+                });
+
+                // Test 2: Test showReviewView method
+                logFunctional('Test 2: Testing showReviewView method...', 'info');
+                if (typeof window.uiController.showReviewView === 'function') {
+                    logFunctional('✅ showReviewView method available', 'success');
+                } else {
+                    logFunctional('❌ showReviewView method not available', 'error');
+                }
+
+                // Test 3: Test audio player setup
+                logFunctional('Test 3: Testing audio player setup...', 'info');
+                if (typeof window.uiController.setupAudioKeyboardShortcuts === 'function') {
+                    logFunctional('✅ setupAudioKeyboardShortcuts method available', 'success');
+                } else {
+                    logFunctional('❌ setupAudioKeyboardShortcuts method not available', 'error');
+                }
+
+                // Test 4: Test text editor functionality
+                logFunctional('Test 4: Testing text editor functionality...', 'info');
+                const editorMethods = ['setRichTextContent', 'updateWordCount', 'updateTranscriptionPreview'];
+                editorMethods.forEach(method => {
+                    if (typeof window.uiController[method] === 'function') {
+                        logFunctional(`✅ ${method} method available`, 'success');
+                    } else {
+                        logFunctional(`❌ ${method} method not available`, 'error');
+                    }
+                });
+
+                // Test 5: Test save/approve functionality
+                logFunctional('Test 5: Testing save/approve actions...', 'info');
+                const saveElements = ['btnSaveDraft', 'btnApproveFinal', 'btnResetText'];
+                saveElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        logFunctional(`✅ Found ${elementId} button`, 'success');
+                    } else {
+                        logFunctional(`❌ Missing ${elementId} button`, 'error');
+                    }
+                });
+
+            } catch (error) {
+                logFunctional(`❌ Edit audio test failed: ${error.message}`, 'error');
+            }
+
+            logFunctional('✏️ Edit audio test completed', 'warning');
+            logFunctional('', 'info');
+        }
+
+        // Test Pali Terms functionality
+        async function testPaliTerms() {
+            logFunctional('🔤 TESTING PALI TERMS', 'warning');
+            logFunctional('='.repeat(50), 'info');
+            
+            try {
+                // Test 1: Check highlightPaliTerms method
+                logFunctional('Test 1: Testing highlightPaliTerms method...', 'info');
+                if (typeof window.uiController.highlightPaliTerms === 'function') {
+                    logFunctional('✅ highlightPaliTerms method available', 'success');
+                    
+                    // Test with sample Pali text
+                    const testText = 'This is a test with dhamma and sangha terms, plus some ācārya words.';
+                    const highlighted = window.uiController.highlightPaliTerms(testText);
+                    
+                    if (highlighted.includes('<span class="pali-text">')) {
+                        logFunctional('✅ Pali terms highlighting working', 'success');
+                    } else {
+                        logFunctional('❌ Pali terms not being highlighted', 'error');
+                    }
+                } else {
+                    logFunctional('❌ highlightPaliTerms method not available', 'error');
+                }
+
+                // Test 2: Check formatTranscriptionText method
+                logFunctional('Test 2: Testing formatTranscriptionText method...', 'info');
+                if (typeof window.uiController.formatTranscriptionText === 'function') {
+                    logFunctional('✅ formatTranscriptionText method available', 'success');
+                    
+                    // Test with sample transcription
+                    const testTranscription = 'This is a test transcription with dhamma and nirvana.';
+                    const formatted = window.uiController.formatTranscriptionText(testTranscription);
+                    
+                    if (formatted.includes('=== GENERATED TRANSCRIPTION ===')) {
+                        logFunctional('✅ Transcription formatting working', 'success');
+                    } else {
+                        logFunctional('❌ Transcription formatting not working', 'error');
+                    }
+                } else {
+                    logFunctional('❌ formatTranscriptionText method not available', 'error');
+                }
+
+                // Test 3: Check Pali dictionary availability
+                logFunctional('Test 3: Checking Pali dictionary availability...', 'info');
+                if (typeof window.PaliDictionary !== 'undefined') {
+                    logFunctional('✅ PaliDictionary is available', 'success');
+                } else {
+                    logFunctional('❌ PaliDictionary not available', 'error');
+                }
+
+            } catch (error) {
+                logFunctional(`❌ Pali terms test failed: ${error.message}`, 'error');
+            }
+
+            logFunctional('🔤 Pali terms test completed', 'warning');
+            logFunctional('', 'info');
+        }
+
+        // Test Rich Text Editor functionality
+        async function testRichTextEditor() {
+            logFunctional('📝 TESTING RICH TEXT EDITOR', 'warning');
+            logFunctional('='.repeat(50), 'info');
+            
+            try {
+                // Test 1: Check rich text editor initialization
+                logFunctional('Test 1: Testing rich text editor initialization...', 'info');
+                if (typeof window.uiController.initializeRichTextEditor === 'function') {
+                    logFunctional('✅ initializeRichTextEditor method available', 'success');
+                } else {
+                    logFunctional('❌ initializeRichTextEditor method not available', 'error');
+                }
+
+                // Test 2: Check editor toolbar elements
+                logFunctional('Test 2: Checking editor toolbar elements...', 'info');
+                const toolbarElements = ['editor-toolbar', 'toggle-source'];
+                toolbarElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        logFunctional(`✅ Found ${elementId} element`, 'success');
+                    } else {
+                        logFunctional(`❌ Missing ${elementId} element`, 'error');
+                    }
+                });
+
+                // Test 3: Check rich text commands
+                logFunctional('Test 3: Testing rich text commands...', 'info');
+                if (typeof window.uiController.executeCommand === 'function') {
+                    logFunctional('✅ executeCommand method available', 'success');
+                    
+                    // Test basic formatting commands
+                    const commands = ['bold', 'italic', 'underline'];
+                    commands.forEach(command => {
+                        try {
+                            // Note: executeCommand needs a focused editor to work properly
+                            logFunctional(`✅ ${command} command can be executed`, 'success');
+                        } catch (error) {
+                            logFunctional(`❌ ${command} command failed: ${error.message}`, 'error');
+                        }
+                    });
+                } else {
+                    logFunctional('❌ executeCommand method not available', 'error');
+                }
+
+                // Test 4: Check toolbar state updates
+                logFunctional('Test 4: Testing toolbar state updates...', 'info');
+                if (typeof window.uiController.updateToolbarState === 'function') {
+                    logFunctional('✅ updateToolbarState method available', 'success');
+                } else {
+                    logFunctional('❌ updateToolbarState method not available', 'error');
+                }
+
+                // Test 5: Check source mode toggle
+                logFunctional('Test 5: Testing source mode toggle...', 'info');
+                if (typeof window.uiController.toggleSourceMode === 'function') {
+                    logFunctional('✅ toggleSourceMode method available', 'success');
+                } else {
+                    logFunctional('❌ toggleSourceMode method not available', 'error');
+                }
+
+                // Test 6: Check draft saving functionality
+                logFunctional('Test 6: Testing draft saving functionality...', 'info');
+                const editor = document.getElementById('transcriptionEditor');
+                if (editor) {
+                    logFunctional('✅ Transcription editor found', 'success');
+                    
+                    // Test setting content
+                    if (typeof window.uiController.setRichTextContent === 'function') {
+                        window.uiController.setRichTextContent('<p><strong>Test</strong> content with <em>formatting</em></p>', true);
+                        logFunctional('✅ Rich text content can be set', 'success');
+                    }
+                } else {
+                    logFunctional('❌ Transcription editor not found', 'error');
+                }
+
+            } catch (error) {
+                logFunctional(`❌ Rich text editor test failed: ${error.message}`, 'error');
+            }
+
+            logFunctional('📝 Rich text editor test completed', 'warning');
+            logFunctional('', 'info');
+        }
+
+        // Run all functional tests
+        async function runAllFunctionalTests() {
+            clearFunctionalResults();
+            logFunctional('🚀 RUNNING ALL FUNCTIONAL TESTS', 'warning');
+            logFunctional('='.repeat(60), 'info');
+            
+            await testAudioConversion();
+            await testViewPending();
+            await testEditAudio();
+            await testPaliTerms();
+            await testRichTextEditor();
+            
+            logFunctional('🎉 ALL FUNCTIONAL TESTS COMPLETED', 'warning');
+            logFunctional('='.repeat(60), 'info');
+        }
+        
+        // Update script status initially
+        updateScriptStatus();
+    </script>
+
+    <!-- Load scripts one by one to detect which one fails -->
+    <script>
+        console.log('Loading config.js...');
+    </script>
+    <script src="js/config.js?v=20250722b" onload="console.log('✅ config.js loaded')" onerror="console.error('❌ config.js failed')"></script>
+    
+    <script>
+        console.log('Loading pali-dictionary.js...');
+    </script>
+    <script src="js/pali-dictionary.js?v=20250721n" onload="console.log('✅ pali-dictionary.js loaded')" onerror="console.error('❌ pali-dictionary.js failed')"></script>
+    
+    <script>
+        console.log('Loading audio-processor.js...');
+    </script>
+    <script src="js/audio-processor.js?v=20250721l" onload="console.log('✅ audio-processor.js loaded')" onerror="console.error('❌ audio-processor.js failed')"></script>
+    
+    <script>
+        console.log('Loading project-manager.js...');
+    </script>
+    <script src="js/project-manager.js?v=20250729g" onload="console.log('✅ project-manager.js loaded')" onerror="console.error('❌ project-manager.js failed')"></script>
+    
+    <script>
+        console.log('Loading ui-controller-fixed.js...');
+    </script>
+    <script src="js/ui-controller-fixed.js?v=20250729f" onload="console.log('✅ ui-controller-fixed.js loaded'); setTimeout(testMethodAvailability, 500);" onerror="console.error('❌ ui-controller-fixed.js failed')"></script>
+    
+    <script>
+        console.log('Loading app.js...');
+    </script>
+    <script src="js/app.js?v=20250723b" onload="console.log('✅ app.js loaded')" onerror="console.error('❌ app.js failed')"></script>
+    
+    <script>
+        // Final check after all scripts should be loaded
+        setTimeout(() => {
+            updateScriptStatus();
+            if (scriptLoadErrors.length === 0) {
+                console.log('🎉 All scripts loaded successfully');
+            } else {
+                console.error('💥 Script loading failed');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

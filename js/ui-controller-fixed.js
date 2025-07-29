@@ -29,6 +29,17 @@ class UIController {
     init() {
         console.log('🔧 UIController init started');
         try {
+            // Check if we have server-based project manager available
+            this.useServerManager = (typeof ServerProjectManager !== 'undefined');
+            
+            if (this.useServerManager) {
+                console.log('✅ Using server-based project manager');
+                this.projectManager = new ServerProjectManager();
+            } else {
+                console.log('⚠️ Server project manager not available, falling back to local manager');
+                this.projectManager = window.projectManager || new ProjectManager();
+            }
+            
             this.cacheElements();
             console.log('✅ Elements cached');
             
@@ -38,7 +49,6 @@ class UIController {
             this.showView('dashboard');
             console.log('✅ Initial view shown (dashboard)');
             
-            // All methods enabled - should work now
             this.refreshProjectsList();
             console.log('✅ Projects list refreshed');
             
@@ -48,7 +58,10 @@ class UIController {
             this.initRowSelection();
             console.log('✅ Row selection initialized');
             
-            console.log('✅ UIController init completed (simplified)');
+            this.initializeRichTextEditor();
+            console.log('✅ Rich text editor initialized');
+            
+            console.log('✅ UIController init completed');
         } catch (error) {
             console.error('❌ UIController init failed:', error);
             console.error('Error stack:', error.stack);
@@ -67,15 +80,6 @@ class UIController {
             // Just check backend status without auto-starting
             setTimeout(() => this.checkAndUpdateBackendStatus(), 1000);
         }
-        
-        // Rich Text Editor Toolbar
-        this.initializeRichTextEditor();
-        
-        // Add table sorting functionality
-        this.initTableSorting();
-        
-        // Add row selection functionality
-        this.initRowSelection();
     }
 
     // Cache DOM elements
@@ -109,7 +113,7 @@ class UIController {
             projectName: document.getElementById('project-name'),
             assignedTo: document.getElementById('assigned-to'),
             projectAudioFile: document.getElementById('project-audio-file'),
-            previewMode: document.getElementById('project-preview-mode'),
+            previewMode: document.getElementById('preview-mode'),
             btnCancelCreate: document.getElementById('btn-cancel-create'),
             
             // Review project
@@ -125,6 +129,7 @@ class UIController {
             btnResetText: document.getElementById('btn-reset-text'),
             btnApproveFinal: document.getElementById('btn-approve-final'),
             btnDownloadFinal: document.getElementById('btn-download-final'),
+            btnExportDocx: document.getElementById('btn-export-docx'),
 
             // Projects list
             projectsList: document.getElementById('projects-list'),
@@ -143,13 +148,18 @@ class UIController {
             searchApprovedProjects: document.getElementById('search-approved-projects'),
 
             // Processing status
-            processingStatusBar: document.getElementById('processing-status-indicator'),
-            processingStatusMessage: document.getElementById('processing-status-text'),
+            processingStatusBar: document.getElementById('processing-status-bar'),
+            processingStatusMessage: document.getElementById('processing-status-message'),
             btnCancelProcessing: document.getElementById('btn-cancel-processing'),
             btnCancelBackgroundProcessing: document.getElementById('btn-cancel-background-processing'),
 
             // Notifications
             notificationContainer: document.getElementById('notification-container'),
+            
+            // Cancel processing modal
+            cancelProcessingModal: document.getElementById('cancel-processing-modal'),
+            confirmCancelProcessing: document.getElementById('confirm-cancel-processing'),
+            cancelCancelProcessing: document.getElementById('cancel-cancel-processing'),
 
             // Views
             viewDashboard: document.getElementById('view-dashboard'),
@@ -310,6 +320,12 @@ class UIController {
             });
         }
 
+        if (this.elements.btnExportDocx) {
+            this.elements.btnExportDocx.addEventListener('click', () => {
+                this.exportDocx();
+            });
+        }
+
         // Search functionality for different views
         if (this.elements.searchProjects) {
             this.elements.searchProjects.addEventListener('input', (e) => {
@@ -349,13 +365,26 @@ class UIController {
         // Processing cancel buttons
         if (this.elements.btnCancelProcessing) {
             this.elements.btnCancelProcessing.addEventListener('click', () => {
-                this.cancelCurrentProcessing();
+                this.showCancelProcessingModal();
             });
         }
 
         if (this.elements.btnCancelBackgroundProcessing) {
             this.elements.btnCancelBackgroundProcessing.addEventListener('click', () => {
-                this.cancelCurrentProcessing();
+                this.showCancelProcessingModal();
+            });
+        }
+        
+        // Cancel processing modal buttons
+        if (this.elements.confirmCancelProcessing) {
+            this.elements.confirmCancelProcessing.addEventListener('click', () => {
+                this.confirmCancelProcessing();
+            });
+        }
+        
+        if (this.elements.cancelCancelProcessing) {
+            this.elements.cancelCancelProcessing.addEventListener('click', () => {
+                this.hideCancelProcessingModal();
             });
         }
 
@@ -511,7 +540,7 @@ class UIController {
     clearAllProjects() {
         console.log('🗑️ Clear all projects requested');
         
-        const projects = projectManager.getAllProjects();
+        const projects = this.projectManager.getAllProjects();
         if (projects.length === 0) {
             this.showSuccessMessage('No projects to clear');
             return;
@@ -522,7 +551,7 @@ class UIController {
         
         if (confirmed) {
             try {
-                projectManager.clearAllProjects();
+                this.projectManager.clearAllProjects();
                 this.refreshProjectsList();
                 this.showSuccessMessage(`All ${projects.length} projects have been deleted`);
                 console.log('✅ All projects cleared successfully');
@@ -536,63 +565,41 @@ class UIController {
     // Handle create project form submission
     async handleCreateProject() {
         console.log('🚀 Create project form submitted');
-        
         try {
             // Get form data
             const formData = {
                 name: this.elements.projectName?.value?.trim() || '',
                 assignedTo: this.elements.assignedTo?.value?.trim() || ''
             };
-            
             // Get audio file and preview mode
             const audioFile = this.elements.projectAudioFile?.files[0];
             const previewMode = this.elements.previewMode?.checked || false;
-            
             console.log('📝 Form data:', { ...formData, audioFile: audioFile?.name, previewMode });
-            
             // Validate required fields
             if (!formData.name) {
                 this.showErrorMessage('Please enter a project name');
                 return;
             }
-            
             if (!audioFile) {
                 this.showErrorMessage('Please select an audio file');
                 return;
             }
-
-            // Create project (this will show processing modal after)
-            const project = projectManager.createProject(formData);
+            // Create project (with automatic name deduplication)
+            const project = await this.projectManager.createProject(formData);
             console.log('✅ Project created:', project.id);
-
             // Reset form and close modal
             this.resetCreateForm();
             this.hideNewProjectModal();
-
-            // Show success notification and return to dashboard
-            this.showView('dashboard');
-
-            // Show transcription modal for processing
+            // Show cancel modal dialog and start processing
             this.showTranscriptionModal(project.id, audioFile, previewMode, formData.name);
-            
         } catch (error) {
             console.error('❌ Error creating project:', error);
             this.hideBackgroundProcessing();
-            
-            // Show detailed error message for project creation
             let errorMessage = error.message;
-            
-            // Format multi-line error messages
             if (errorMessage.includes('\n')) {
-                this.showDetailedError('New Project', errorMessage);
-            } else {
-                // Simple error handling for basic issues
-                if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
-                    errorMessage = 'Backend server not running. Please start the Whisper server first.';
-                }
-                
-                this.showErrorMessage('Error creating project: ' + errorMessage);
+                errorMessage = errorMessage.replace(/\n/g, '<br>');
             }
+            this.showDetailedError('Create Project', errorMessage);
         }
     }
 
@@ -663,7 +670,7 @@ class UIController {
             
             console.log('📎 Attaching audio file to project...');
             // Attach audio file to project
-            await projectManager.attachAudioFile(projectId, audioFile, 'local', previewMode);
+            await this.projectManager.attachAudioFile(projectId, audioFile, 'local', previewMode);
             console.log('✅ Audio file attached successfully');
             
             if (!this.isProcessing) {
@@ -682,7 +689,7 @@ class UIController {
                 console.log('🔄 Processing cancelled by user');
                 // Clean up project if it was just created
                 try {
-                    projectManager.deleteProject(projectId);
+                    this.projectManager.deleteProject(projectId);
                 } catch (cleanupError) {
                     console.warn('Could not clean up cancelled project:', cleanupError);
                 }
@@ -701,42 +708,23 @@ class UIController {
     async processWithWhisperBackend(projectId, audioFile, previewMode = false) {
         console.log('🎙️ Processing with Whisper backend. Project:', projectId, 'Preview:', previewMode);
         try {
-            const formData = new FormData();
-            formData.append('audio', audioFile);
-            formData.append('model', 'medium');
-            formData.append('language', 'English');
-            formData.append('preview', previewMode ? 'true' : 'false');
-            if (previewMode) {
-                formData.append('preview_duration', '60');
-            }
-
-            console.log('📤 Sending request to Whisper backend at http://localhost:8765/process');
-            console.log('📋 FormData contents:', {
-                audio: audioFile.name,
+            // Use the project manager's transcribeProject method for server-based workflow
+            console.log('📤 Starting server-based transcription...');
+            
+            const transcriptionOptions = {
                 model: 'medium',
                 language: 'English',
-                preview: previewMode ? 'true' : 'false'
-            });
+                preview: previewMode,
+                previewDuration: 60
+            };
 
-            const response = await fetch('http://localhost:8765/process', {
-                method: 'POST',
-                body: formData
-            });
+            const result = await this.projectManager.transcribeProject(projectId, transcriptionOptions);
+            
+            console.log('✅ Server transcription completed:', result);
 
-            console.log('📥 Response received:', response.status, response.statusText);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('❌ Backend error response:', errorText);
-                throw new Error(`Backend error: ${response.status} - ${errorText}`);
-            }
-
-            const result = await response.json();
-            console.log('✅ Backend response received:', result);
-
-            // Check if the backend returned an error
-            if (result.success === false) {
-                throw new Error(result.error || 'Backend processing failed');
+            // Check if the transcription was successful
+            if (!result.success) {
+                throw new Error(result.error || 'Transcription failed');
             }
 
             const transcription = result.transcription;
@@ -744,35 +732,23 @@ class UIController {
                 throw new Error('No transcription received from backend');
             }
 
-            // Update project with transcription results
+            // Update project with transcription results (the server already updated it, but we update UI state)
             const formattedText = this.formatTranscriptionText(transcription);
-            console.log('📝 Updating project with transcription results');
+            console.log('📝 Transcription completed successfully');
             
-            const updateData = {
+            // The project manager already updated the server, so we just need to refresh local state
+            await this.projectManager.loadProjects();
+
+            return {
+                success: true,
                 transcription: transcription,
                 formattedText: formattedText,
-                status: CONFIG.PROJECT_STATUS.COMPLETED
+                word_count: result.word_count,
+                processing_time: result.processing_time
             };
 
-            // Add additional metadata if available
-            if (result.word_count) updateData.wordCount = result.word_count;
-            if (result.processing_time) updateData.processingTime = result.processing_time;
-            if (result.preview_mode !== undefined) updateData.isPreview = result.preview_mode;
-            if (result.timestamps) updateData.timestamps = result.timestamps;
-            
-            projectManager.updateProject(projectId, updateData);
-
-            console.log('✅ Project updated with transcription');
-
         } catch (error) {
-            console.error('❌ Whisper backend processing failed:', error);
-            
-            // Update project status to error
-            projectManager.updateProject(projectId, {
-                status: CONFIG.PROJECT_STATUS.ERROR,
-                error: error.message
-            });
-            
+            console.error('❌ Error in processWithWhisperBackend:', error);
             throw error;
         }
     }
@@ -1024,40 +1000,40 @@ class UIController {
     }
 
     // Refresh projects list
-    refreshProjectsList() {
-        const projects = projectManager.getAllProjects();
-        
-        // Update table view
-        if (this.elements.projectsTableBody) {
-            this.elements.projectsTableBody.innerHTML = '';
-            
-            if (projects.length === 0) {
-                this.elements.projectsTableBody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                            <div class="flex flex-col items-center">
-                                <div class="text-4xl mb-2">🎙️</div>
-                                <p>No projects yet. Create your first project to get started!</p>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                return;
+    async refreshProjectsList() {
+        try {
+            // Refresh projects (server or local)
+            if (this.useServerManager) {
+                await this.projectManager.loadProjects();
             }
+            const projects = this.projectManager.getAllProjects();
             
-            projects.forEach(project => {
-                const projectRow = this.createProjectTableRow(project);
-                this.elements.projectsTableBody.appendChild(projectRow);
-            });
-        }
-        
-        // Keep old grid for backward compatibility (hidden)
-        if (this.elements.projectsList) {
-            this.elements.projectsList.innerHTML = '';
-            projects.forEach(project => {
-                const projectCard = this.createProjectCard(project);
-                this.elements.projectsList.appendChild(projectCard);
-            });
+            // Update table view (primary)
+            if (this.elements.projectsTableBody) {
+                this.elements.projectsTableBody.innerHTML = '';
+                
+                if (projects.length === 0) {
+                    this.elements.projectsTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                <div class="flex flex-col items-center">
+                                    <div class="text-4xl mb-2">🎙️</div>
+                                    <p>No projects yet. Create your first project to get started!</p>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                projects.forEach(project => {
+                    const projectRow = this.createProjectTableRow(project);
+                    this.elements.projectsTableBody.appendChild(projectRow);
+                });
+            }
+        } catch (error) {
+            console.error('❌ Error refreshing projects:', error);
+            this.showErrorMessage('Failed to refresh projects');
         }
     }
 
@@ -1233,17 +1209,43 @@ class UIController {
         }
 
         // Set up audio player
-        if (this.elements.reviewAudioPlayer && project.audioUrl) {
-            this.elements.reviewAudioPlayer.innerHTML = `
-                <audio id="review-audio" controls class="min-w-0">
-                    <source src="${project.audioUrl}" type="${project.audioType || 'audio/mpeg'}">
-                    Your browser does not support the audio element.
-                </audio>
-            `;
-        } else if (this.elements.reviewAudioPlayer) {
-            this.elements.reviewAudioPlayer.innerHTML = `
-                <div class="text-gray-400 text-sm">No audio</div>
-            `;
+        console.log('🎵 Setting up audio player for project:', project.name);
+        console.log('🎵 Project audioUrl:', project.audioUrl);
+        console.log('🎵 Project audioFile:', project.audioFile);
+        console.log('🎵 reviewAudioPlayer element:', this.elements.reviewAudioPlayer);
+        
+        if (this.elements.reviewAudioPlayer) {
+            // Check if we have an audioUrl, if not try to create one from audioFile
+            let audioUrl = project.audioUrl;
+            
+            if (!audioUrl && project.audioFile) {
+                console.log('🎵 Regenerating audio URL from stored file');
+                audioUrl = URL.createObjectURL(project.audioFile);
+                // Update the project with the new URL
+                this.projectManager.updateProject(project.id, { audioUrl: audioUrl });
+            }
+            
+            if (audioUrl) {
+                console.log('🎵 Creating audio player with URL:', audioUrl);
+                this.elements.reviewAudioPlayer.innerHTML = `
+                    <audio id="review-audio" controls class="min-w-0 max-w-sm">
+                        <source src="${audioUrl}" type="${project.audioType || 'audio/mpeg'}">
+                        Your browser does not support the audio element.
+                    </audio>
+                `;
+                
+                // Set up keyboard shortcuts for audio control
+                this.setupAudioKeyboardShortcuts();
+            } else {
+                console.log('🎵 No audio file available');
+                this.elements.reviewAudioPlayer.innerHTML = `
+                    <div class="text-gray-400 text-sm">
+                        <span class="text-gray-500">🎵</span> No audio file attached
+                    </div>
+                `;
+            }
+        } else {
+            console.error('❌ reviewAudioPlayer element not found');
         }
 
         // Set up text editor
@@ -1271,1134 +1273,11 @@ class UIController {
         this.showView('review');
     }
 
-    // Update word and character count
-    updateWordCount() {
-        // Check if we have a current project first
-        if (!this.currentProject || !this.currentProject.id) {
-            // Only log once per session to avoid console spam
-            if (!this.hasLoggedNoProject) {
-                console.log('No current project selected, skipping word count update');
-                this.hasLoggedNoProject = true;
-            }
-            return;
-        }
-        
-        // Reset the logging flag when we have a project
-        this.hasLoggedNoProject = false;
-        
-        const project = projectManager.getProject(this.currentProject.id);
-        if (!this.elements.transcriptionEditor) return;
-        
-        const text = this.getRichTextContent(true); // Get plain text content
-        const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-        const charCount = text.length;
-
-        if (this.elements.wordCount) {
-            this.elements.wordCount.textContent = `${wordCount} words`;
-        }
-        if (this.elements.characterCount) {
-            this.elements.characterCount.textContent = `${charCount} characters`;
-        }
-    }
-
-    // Approve final version
-    approveFinal() {
-        console.log('🎯 approveFinal() called');
-        
-        if (!this.currentProject || !this.elements.transcriptionEditor) {
-            console.error('❌ Missing currentProject or transcriptionEditor:', {
-                currentProject: !!this.currentProject,
-                transcriptionEditor: !!this.elements.transcriptionEditor
-            });
-            return;
-        }
-        
-        console.log('✅ Current project found:', this.currentProject.name);
-        
-        const finalText = this.getRichTextContent(true).trim(); // Get plain text
-        const richContent = this.getRichTextContent(false); // Get HTML content
-        const projectName = UTILS.sanitizeFilename(this.currentProject.name);
-        
-        console.log('📝 Final text length:', finalText.length);
-        
-        if (!finalText) {
-            this.showErrorMessage('Please enter some text before approving');
-            return;
-        }
-        
-        const confirmApprove = confirm('Are you sure you want to approve this transcription as final? This will mark the project as complete.');
-        if (!confirmApprove) {
-            console.log('❌ User cancelled approval');
-            return;
-        }
-        
-        console.log('✅ User confirmed approval, proceeding...');
-        
-        // Re-apply Pali highlighting to the final text
-        const formattedFinalText = this.highlightPaliTerms(finalText);
-        try {
-            // Update project to approved status
-            projectManager.updateProject(this.currentProject.id, {
-                editedText: finalText, // Store plain text
-                finalText: finalText, // Store plain final text
-                richContent: richContent, // Store rich text HTML
-                formattedText: formattedFinalText, // Store formatted version for display
-                status: CONFIG.PROJECT_STATUS.APPROVED,
-                approvedDate: new Date().toISOString(),
-                lastEdited: new Date().toISOString()
-            });
-            
-            console.log('✅ Project updated successfully');
-            
-            this.showSuccessMessage(`Project "${this.currentProject.name}" has been approved and finalized!`);
-            console.log('✅ Project approved:', this.currentProject.name);
-            
-            // Return to dashboard view
-            setTimeout(() => {
-                this.showView('dashboard');
-            }, 2000);
-        } catch (error) {
-            console.error('❌ Error approving project:', error);
-            this.showErrorMessage('Failed to approve project: ' + error.message);
-        }
-    }
-
-    // Download final transcription
-    downloadFinal() {
-        if (!this.currentProject || !this.elements.transcriptionEditor) return;
-        const finalText = this.getRichTextContent(true); // Get plain text for download
-        const richContent = this.getRichTextContent(false); // Get HTML content
-        const projectName = UTILS.sanitizeFilename(this.currentProject.name);
-        try {
-            // Create download blob
-            const blob = new Blob([finalText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-
-            // Create download link
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${projectName}_Final_Transcription.txt`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            console.log('📥 Downloaded final transcription:', link.download);
-            this.showSuccessMessage('Final transcription downloaded successfully!');
-        } catch (error) {
-            console.error('❌ Error downloading transcription:', error);
-            this.showErrorMessage('Failed to download transcription: ' + error.message);
-        }
-    }
-
-    // Setup audio keyboard shortcuts
-    setupAudioKeyboardShortcuts() {
-        // Remove any existing audio shortcuts
-        document.removeEventListener('keydown', this.audioKeyboardHandler);
-        
-        // Add new audio keyboard handler
-        this.audioKeyboardHandler = (e) => {
-            // Only work when in review view and not typing in text area
-            if (this.currentView !== 'review' || e.target === this.elements.transcriptionEditor) return;
-            
-            const audio = document.getElementById('review-audio');
-            if (!audio) return;
-            
-            switch (e.key) {
-                case ' ':
-                    e.preventDefault();
-                    if (audio.paused) {
-                        audio.play();
-                    } else {
-                        audio.pause();
-                    }
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();    
-                    audio.currentTime = Math.max(0, audio.currentTime - 10);
-                    break;;
-                        
-                case 'ArrowRight':
-                    e.preventDefault();
-                    audio.currentTime = Math.min(audio.duration, audio.currentTime + 10);
-                    break;
-            }
-        };
-        
-        document.addEventListener('keydown', this.audioKeyboardHandler);
-    }
-
-    // Initialize Rich Text Editor
-    initializeRichTextEditor() {
-        console.log('🎨 Initializing Rich Text Editor...');
-        const toolbar = document.getElementById('editor-toolbar');
-        const editor = this.elements.transcriptionEditor;
-        const toggleSourceBtn = document.getElementById('toggle-source');
-        const sourceEditor = document.getElementById('transcription-source');
-
-        console.log('🔍 Rich Text Editor elements:', {
-            toolbar: !!toolbar,
-            editor: !!editor,
-            toggleSourceBtn: !!toggleSourceBtn,
-            sourceEditor: !!sourceEditor
-        });
-
-        if (!toolbar || !editor) {
-            console.error('❌ Rich Text Editor initialization failed - missing elements');
-            return;
-        }
-
-        console.log('✅ Rich Text Editor elements found, setting up...');
-        this.isSourceMode = false;
-
-        // Toolbar button handlers
-        toolbar.addEventListener('click', (e) => {
-            console.log('🖱️ Toolbar clicked:', e.target);
-            if (e.target.classList.contains('toolbar-btn') || e.target.classList.contains('toolbar-btn-sm') || e.target.closest('.toolbar-btn') || e.target.closest('.toolbar-btn-sm')) {
-                e.preventDefault();
-                const btn = (e.target.classList.contains('toolbar-btn') || e.target.classList.contains('toolbar-btn-sm')) ? e.target : (e.target.closest('.toolbar-btn') || e.target.closest('.toolbar-btn-sm'));
-                const command = btn.getAttribute('data-command');
-                console.log('🎯 Executing toolbar command:', command);
-                if (command && command !== 'removeFormat') {
-                    this.executeCommand(command, null);
-                } else if (command === 'removeFormat') {
-                    this.executeCommand('removeFormat', null);
-                } else if (command === 'unlink') {
-                    // Special case for unlinking (removing link)
-                    this.executeCommand('unlink', null);
-                }
-                this.updateToolbarState();
-            }
-        });
-
-        // Select dropdown handler
-        toolbar.addEventListener('change', (e) => {
-            if (e.target.classList.contains('toolbar-select') || e.target.classList.contains('toolbar-select-sm')) {
-                e.preventDefault();
-                const command = e.target.getAttribute('data-command');
-                const value = e.target.value;
-                if (command === 'formatBlock') {
-                    this.executeCommand(command, value === 'div' ? 'p' : value);
-                }
-                this.updateToolbarState();
-            }
-        });
-
-        // Toggle source mode
-        if (toggleSourceBtn) {
-            toggleSourceBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.toggleSourceMode();
-            });
-        }
-
-        // Update toolbar state on editor selection changes
-        editor.addEventListener('mouseup', () => this.updateToolbarState());
-        editor.addEventListener('keyup', () => this.updateToolbarState());
-
-        // Handle keyboard shortcuts
-        editor.addEventListener('keydown', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                switch (e.key.toLowerCase()) {
-                    case 'b':
-                        e.preventDefault();
-                        this.executeCommand('bold');
-                        this.updateToolbarState();
-                        break;
-                    case 'i':
-                        e.preventDefault();
-                        this.executeCommand('italic');
-                        this.updateToolbarState();
-                        break;
-                    case 'u':
-                        e.preventDefault();
-                        this.executeCommand('underline');
-                        this.updateToolbarState();
-                        break;
-                }    
-            }
-        });
-
-        // Prevent paste from bringing in unwanted formatting by default
-        editor.addEventListener('paste', (e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            this.executeCommand('insertText', text);
-        });
-    }
-
-    // Toggle between rich text and HTML source mode
-    toggleSourceMode() {
-        const editor = this.elements.transcriptionEditor;
-        const sourceEditor = document.getElementById('transcription-source');
-        const toggleBtn = document.getElementById('toggle-source');
-
-        if (!editor || !sourceEditor) return;
-
-        this.isSourceMode = !this.isSourceMode;
-        if (this.isSourceMode) {
-            // Switch to source mode
-            sourceEditor.value = editor.innerHTML;
-            editor.classList.add('hidden');
-            sourceEditor.classList.remove('hidden');
-            toggleBtn.textContent = 'Visual';
-            toggleBtn.title = 'Switch to Visual Editor';
-        } else {
-            // Switch to visual mode
-            editor.innerHTML = sourceEditor.value;
-            sourceEditor.classList.add('hidden');
-            editor.classList.remove('hidden');                
-            toggleBtn.textContent = 'Source';
-            toggleBtn.title = 'Toggle HTML Source';
-        }
-        
-        // Update preview after switching back
-        this.updateTranscriptionPreview();
-    }
-
-    // Execute rich text command
-    executeCommand(command, value = null) {
-        try {
-            console.log('🎯 Executing toolbar command:', command);
-            
-            // Ensure the editor is focused
-            if (this.elements.transcriptionEditor) {
-                this.elements.transcriptionEditor.focus();
-            }
-            
-            // Check if we have a text selection
-            const selection = window.getSelection();
-            const hasSelection = selection && !selection.isCollapsed;
-            console.log(`📝 Selection info: hasSelection=${hasSelection}, text="${selection.toString()}"`);
-            
-            // Try modern approach first, then fall back to execCommand
-            let success = false;
-            
-            if (hasSelection && ['bold', 'italic', 'underline'].includes(command)) {
-                // Try modern approach for basic formatting
-                success = this.applyModernFormatting(command, selection);
-            }
-            
-            // Fallback to execCommand if modern approach didn't work
-            if (!success) {
-                success = document.execCommand(command, false, value);
-            }
-            
-            if (success) {
-                console.log('✅ Command executed successfully:', command);
-                
-                // Log the resulting HTML to see what was actually created
-                if (this.elements.transcriptionEditor) {
-                    const currentHTML = this.elements.transcriptionEditor.innerHTML;
-                    console.log('📄 Editor HTML after command:', currentHTML.substring(0, 200) + '...');
-                }
-                
-                // Check command state to see if it's actually active
-                const isActive = document.queryCommandState(command);
-                console.log(`🔍 Command "${command}" is now active: ${isActive}`);
-                
-                // Update toolbar state immediately to show active buttons
-                this.updateToolbarState();
-                
-                // Debounced update to avoid excessive calls
-                clearTimeout(this.commandUpdateTimeout);
-                this.commandUpdateTimeout = setTimeout(() => {
-                    try {
-                        this.updateTranscriptionPreview();
-                        this.updateWordCount();
-                    } catch (error) {
-                        console.error('Error updating after command execution:', error);
-                    }
-                }, 100); // Slightly longer delay to batch updates
-            } else {
-                console.warn('⚠️ Command execution may have failed:', command);
-            }
-        } catch (error) {
-            console.error('❌ Error executing command:', command, error);
-        }
-    }
-    
-    // Modern formatting approach using DOM manipulation
-    applyModernFormatting(command, selection) {
-        try {
-            const range = selection.getRangeAt(0);
-            const selectedText = range.toString();
-            
-            if (!selectedText) {
-                return false; // No text selected, let execCommand handle it
-            }
-            
-            // Create the appropriate formatting element
-            let formatElement;
-            switch (command) {
-                case 'bold':
-                    formatElement = document.createElement('strong');
-                    break;
-                case 'italic':
-                    formatElement = document.createElement('em');
-                    break;
-                case 'underline':
-                    formatElement = document.createElement('u');
-                    break;
-                default:
-                    return false;
-            }
-            
-            // Check if the selection is already formatted
-            let parentElement = range.commonAncestorContainer;
-            if (parentElement.nodeType === Node.TEXT_NODE) {
-                parentElement = parentElement.parentElement;
-            }
-            
-            // If already formatted with the same tag, remove formatting
-            if (parentElement && parentElement.tagName && parentElement.tagName.toLowerCase() === formatElement.tagName.toLowerCase()) {
-                const textNode = document.createTextNode(parentElement.textContent);
-                parentElement.parentNode.replaceChild(textNode, parentElement);
-                console.log('🔄 Removed existing formatting');
-                return true;
-            }
-            
-            // Apply new formatting
-            formatElement.textContent = selectedText;
-            range.deleteContents();
-            range.insertNode(formatElement);
-            
-            // Clear selection and position cursor after the formatted text
-            selection.removeAllRanges();
-            const newRange = document.createRange();
-            newRange.setStartAfter(formatElement);
-            newRange.collapse(true);
-            selection.addRange(newRange);
-            
-            console.log(`✅ Applied ${command} formatting using modern DOM approach`);
-            return true;
-            
-        } catch (error) {
-            console.error('❌ Modern formatting failed:', error);
-            return false;
-        }
-    }
-
-    // Update toolbar button states
-    updateToolbarState() {
-        const toolbar = document.getElementById('editor-toolbar');
-        if (!toolbar) return;
-        
-        const commands = ['bold', 'italic', 'underline'];
-        commands.forEach(command => {
-            const btn = toolbar.querySelector(`[data-command="${command}"]`);
-            if (btn) {
-                if (document.queryCommandState(command)) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            }
-        });
-
-        // Update format dropdown (both sizes)
-        const formatSelect = toolbar.querySelector('[data-command="formatBlock"]');
-        if (formatSelect) {
-            const formatValue = document.queryCommandValue('formatBlock');
-            if (formatValue) {
-                formatSelect.value = formatValue.toLowerCase();
-            } else {
-                formatSelect.value = 'div';
-            }
-        }
-    }
-
-    // Get rich text content (HTML or plain text)
-    getRichTextContent(asPlainText = false) {
-        const editor = this.elements.transcriptionEditor;
-        const sourceEditor = document.getElementById('transcription-source');
-
-        if (!editor) return '';
-
-        if (this.isSourceMode && sourceEditor) {
-            return asPlainText ? sourceEditor.value.replace(/<[^>]*>/g, '') : sourceEditor.value;
-        } else {
-            return asPlainText ? editor.textContent : editor.innerHTML;
-        }
-    }
-
-    // Set rich text content
-    setRichTextContent(content, isHTML = false) {
-        const editor = this.elements.transcriptionEditor;
-        const sourceEditor = document.getElementById('transcription-source');
-
-        if (!editor) return;
-
-        if (isHTML) {
-            editor.innerHTML = content;
-            if (sourceEditor) {
-                sourceEditor.value = content;
-            }
-        } else {
-            // Plain text
-            editor.textContent = content;
-            if (sourceEditor) {
-                sourceEditor.value = this.escapeHtml(content);
-            }
-        }
-    }
-
-    // Escape HTML characters
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // Update transcription preview (placeholder method to prevent errors)
-    updateTranscriptionPreview() {
-        // This method is called to update any transcription preview elements
-        // Currently a placeholder to prevent runtime errors
-        // Can be extended in the future if preview functionality is needed
-        try {
-            // If there's a preview element, update it
-            const previewElement = document.getElementById('transcription-preview');
-            if (previewElement && this.elements.transcriptionEditor) {
-                const content = this.getRichTextContent(false); // Get HTML content
-                previewElement.innerHTML = content;
-            }
-        } catch (error) {
-            console.log('Error updating transcription preview:', error);
-        }
-    }
-
-    // Initialize DOM elements
-
-    // Add table sorting functionality
-    initTableSorting() {
-        const headers = document.querySelectorAll('.projects-table th[data-column]');
-        headers.forEach(header => {
-            header.style.cursor = 'pointer';
-            header.addEventListener('click', () => {
-                const column = header.dataset.column;
-                this.sortTable(column);
-            });
-        });
-    }
-
-    sortTable(column) {
-        // Toggle sort direction
-        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-        this.sortColumn = column;
-
-        const projects = projectManager.getAllProjects();
-        projects.sort((a, b) => {
-            let aVal, bVal;
-            switch(column) {
-                case 'name':
-                    aVal = a.name.toLowerCase();
-                    bVal = b.name.toLowerCase();
-                    break;
-                case 'status':
-                    aVal = a.status;
-                    bVal = b.status;
-                    break;
-                case 'created':
-                    aVal = new Date(a.created);
-                    bVal = new Date(b.created);
-                    break;
-                case 'assigned':
-                    aVal = (a.assignedTo || 'ZZZ').toLowerCase(); // Put unassigned at end
-                    bVal = (b.assignedTo || 'ZZZ').toLowerCase();
-                    break;
-                default:
-                    return 0;
-            }
-            if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
-            if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
-            return 0;
-        });
-        projectManager.projects = projects;
-        this.refreshProjectsList();
-        
-        // Update header indicators
-        document.querySelectorAll('.projects-table th[data-column]').forEach(th => {
-            th.classList.remove('sorted-asc', 'sorted-desc');
-        });
-        const currentHeader = document.querySelector(`th[data-column="${column}"]`);
-        if (currentHeader) {
-            currentHeader.classList.add(`sorted-${this.sortDirection}`);
-        }
-    }
-
-    // Add row selection functionality
-    initRowSelection() {
-        // Add click handler for table rows
-        document.addEventListener('click', (e) => {
-            const row = e.target.closest('.projects-table tbody tr');
-            if (row && !e.target.closest('.project-row-actions')) {
-                // Clear previous selections
-                document.querySelectorAll('.projects-table tbody tr').forEach(r => {
-                    r.classList.remove('selected');
-                });
-                // Select this row
-                row.classList.add('selected');
-            }
-        });
-    }
-
-    // Open project for editing/review
-    openProject(projectId) {
-        console.log(`🔄 Opening project: ${projectId}`);
-        
-        try {
-            // Get project data
-            const project = projectManager.getProject(projectId);
-            if (!project) {
-                this.showErrorMessage(`Project not found: ${projectId}`);
-                return;
-            }
-            
-            console.log('✅ Project found, setting as current project:', project.name);
-            
-            // Set current project (this is essential for approveFinal to work)
-            this.currentProject = project;
-            
-            // Store current project ID for compatibility
-            this.currentProjectId = projectId;
-            
-            // Use the existing showReviewView method which properly sets everything up
-            this.showReviewView(project);
-            
-        } catch (error) {
-            console.error('❌ Error opening project:', error);
-            this.showErrorMessage(`Error opening project: ${error.message}`);
-        }
-    }
-
-    // Load project data into the review view
-    loadProjectIntoReviewView(project) {
-        console.log(`📄 Loading project into review view:`, project.id);
-        
-        try {
-            // Update project info display
-            if (this.elements.reviewProjectInfo) {
-                this.elements.reviewProjectInfo.innerHTML = `
-                    <div class="flex items-center space-x-4 text-sm">
-                        <div><span class="font-medium">${UTILS.escapeHtml(project.name)}</span></div>
-                        <div class="text-gray-500">•</div>
-                        <div>Status: <span class="font-medium">${project.status}</span></div>
-                        <div class="text-gray-500">•</div>
-                        <div>Created: ${new Date(project.created).toLocaleDateString()}</div>
-                        ${project.assignedTo ? `
-                            <div class="text-gray-500">•</div>
-                            <div>Assigned: <span class="font-medium">${UTILS.escapeHtml(project.assignedTo)}</span></div>
-                        ` : ''}
-                    </div>
-                `;
-            }
-            
-            // Load transcription into editor if available
-            if (this.elements.transcriptionEditor) {
-                this.elements.transcriptionEditor.textContent = project.transcription || '';
-            }
-            
-            // Update preview
-            if (this.elements.transcriptionPreview) {
-                this.elements.transcriptionPreview.innerHTML = project.transcription || 
-                    '<div class="text-gray-400 italic text-center py-20"><div class="text-4xl mb-2">👁️</div><div>Preview will appear here as you edit...</div></div>';
-            }
-            
-        } catch (error) {
-            console.error('❌ Error loading project into review view:', error);
-            this.showErrorMessage(`Error loading project: ${error.message}`);
-        }
-    }
-
-    // Show transcription processing modal instead of background processing
-    showTranscriptionModal(projectId, audioFile, previewMode, projectName) {
-        console.log('🎬 Showing transcription modal for project:', projectId);
-        
-        // Calculate file size and time estimates
-        const fileSizeMB = audioFile.size / (1024 * 1024);
-        const timeEstimate = this.getProcessingTimeEstimate(fileSizeMB, previewMode);
-        
-        // Simple HTML escaping function
-        const escapeHtml = (text) => {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        };
-        
-        // Show warning for large files
-        let warningSection = '';
-        if (fileSizeMB > 25 && !previewMode) {
-            warningSection = `
-                <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-4">
-                    <div class="flex">
-                        <div class="text-yellow-500 mr-2">⚠️</div>
-                        <div class="text-sm text-yellow-800">
-                            <strong>Large file detected:</strong> ${fileSizeMB.toFixed(1)}MB<br>
-                            This may take <strong>${timeEstimate}</strong> to process.
-                            <br><small>Keep this tab open and the computer awake.</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-        
-        // Create modal HTML
-        const modalHTML = `
-            <div id="transcription-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                    <div class="text-center">
-                        <div class="text-4xl mb-4">🎤</div>
-                        <h3 class="text-lg font-semibold mb-2">Processing Audio</h3>
-                        <p class="text-gray-600 mb-2">Transcribing "${escapeHtml(projectName)}"</p>
-                        <p class="text-xs text-gray-500 mb-4">${fileSizeMB.toFixed(1)}MB • Est: ${timeEstimate}</p>
-                        ${warningSection}
-                        <div class="flex items-center justify-center space-x-2 mb-4">
-                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                            <span class="text-blue-600 text-sm" id="processing-status">Processing audio...</span>
-                        </div>
-                        <div id="transcription-progress" class="text-xs text-gray-500 mb-4">
-                            ${previewMode ? 'Preview mode: Processing first 60 seconds' : 'Full transcription in progress'}
-                        </div>
-                        <button id="cancel-transcription" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Add modal to DOM
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        
-        // Add cancel handler
-        const cancelBtn = document.getElementById('cancel-transcription');
-        const modal = document.getElementById('transcription-modal');
-        let isCancelled = false;
-        
-        const cleanup = () => {
-            if (modal) {
-                modal.remove();
-            }
-        };
-        
-        cancelBtn?.addEventListener('click', () => {
-            console.log('🛑 Transcription cancelled by user');
-            isCancelled = true;
-            cleanup();
-            
-            // Update project status to cancelled/error
-            projectManager.updateProject(projectId, {
-                status: CONFIG.PROJECT_STATUS.ERROR,
-                error: 'Cancelled by user'
-            });
-            
-            this.refreshProjectsList();
-            this.showNotification('Transcription cancelled', 'info', 3000);
-        });
-        
-        // Start the actual transcription process
-        this.processProjectAudioWithModal(projectId, audioFile, previewMode, cleanup, () => isCancelled);
-    }
-
-    // Process audio with modal feedback and real progress tracking
-    async processProjectAudioWithModal(projectId, audioFile, previewMode, cleanup, isCancelledCallback = () => false) {
-        let timer = null; // Declare timer at method scope
-        
-        try {
-            // Check for cancellation at each step
-            if (isCancelledCallback()) return;
-            
-            // Update modal status
-            const progressEl = document.getElementById('transcription-progress');
-            const statusEl = document.getElementById('processing-status');
-            
-            if (statusEl) statusEl.textContent = 'Initializing...';
-            if (progressEl) progressEl.textContent = 'Starting transcription process...';
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            if (isCancelledCallback()) return;
-            
-            // Try real backend transcription
-            let transcriptionResult = null;
-            let backendError = null;
-            
-            try {
-                if (statusEl) statusEl.textContent = 'Connecting to Whisper backend...';
-                if (progressEl) progressEl.textContent = 'Checking backend availability...';
-                
-                if (isCancelledCallback()) return;
-                
-                // Try direct transcription
-                if (statusEl) statusEl.textContent = 'Uploading audio file...';
-                if (progressEl) progressEl.textContent = 'Sending audio to backend...';
-                
-                // Skip audio duration detection to prevent hanging
-                const targetDuration = previewMode ? 60 : 'unknown';
-                
-                if (progressEl) progressEl.textContent = `Audio: ${targetDuration}s ${previewMode ? '(preview)' : '(full)'}`;
-                
-                // Backend transcription attempt with correct parameters
-                const formData = new FormData();
-                formData.append('audio', audioFile);
-                formData.append('model', 'medium');
-                formData.append('language', 'English');
-                formData.append('preview', previewMode ? 'true' : 'false');
-                if (previewMode) {
-                    formData.append('preview_duration', '60'); // Backend expects 'preview_duration'
-                }
-                
-                console.log('📤 Sending to backend:', {
-                    filename: audioFile.name,
-                    size: audioFile.size,
-                    preview: previewMode,
-                    duration: previewMode ? 60 : 'full'
-                });
-                
-                if (statusEl) statusEl.textContent = 'Processing with Whisper...';
-                if (progressEl) progressEl.textContent = `Transcribing ${targetDuration}s of audio...`;
-                
-                const startTime = Date.now();
-                console.log('🚀 Starting fetch request to backend...');
-                
-                // Add a timeout based on file size
-                const fileSizeMB = audioFile.size / (1024 * 1024);
-                const estimatedMinutes = previewMode ? 5 : Math.max(30, fileSizeMB * 1.5);
-                const timeoutMs = estimatedMinutes * 60 * 1000;
-                
-                // Start a timer to update elapsed time in the modal
-                timer = setInterval(() => {
-                    if (isCancelledCallback()) {
-                        clearInterval(timer);
-                        return;
-                    }
-                    
-                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    const minutes = Math.floor(elapsed / 60);
-                    const seconds = elapsed % 60;
-                    const elapsedStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    
-                    if (progressEl) {
-                        const estimatedStr = previewMode ? '2-5 min' : `~${Math.ceil(estimatedMinutes)}min`;
-                        progressEl.textContent = `Processing... ${elapsedStr} elapsed (Est: ${estimatedStr})`;
-                    }
-                }, 1000);
-                
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => {
-                    console.log('⏰ Request timed out, aborting...');
-                    controller.abort();
-                }, timeoutMs);
-                
-                // Start transcription with timeout and abort controller
-                let response;
-                try {
-                    console.log('📡 Making fetch request...');
-                    response = await fetch(CONFIG.WHISPER_BACKEND.URL, {
-                        method: 'POST',
-                        body: formData,
-                        signal: controller.signal
-                    });
-                    console.log('📡 Fetch request completed:', response.status);
-                    clearTimeout(timeoutId);
-                } catch (fetchError) {
-                    clearTimeout(timeoutId);
-                    clearInterval(timer); // Stop elapsed time updates
-                    if (fetchError.name === 'AbortError') {
-                        throw new Error('Request timed out');
-                    }
-                    throw fetchError;
-                }
-                
-                // Check for cancellation before processing response
-                if (isCancelledCallback()) {
-                    console.log('🛑 Processing cancelled during request');
-                    return;
-                }
-                
-                    console.log('📥 Processing response...');
-                    if (response.ok) {
-                        console.log('✅ Response OK, parsing JSON...');
-                        clearInterval(timer); // Stop elapsed time updates
-                        const result = await response.json();
-                        console.log('🎯 Backend response:', result);
-                        
-                        // Check if the backend returned an error
-                        if (result.success === false) {
-                            console.error('❌ Backend returned error:', result.error);
-                            throw new Error(result.error || 'Unknown backend error');
-                        }
-                        
-                        transcriptionResult = result.transcription || result.text;
-                        
-                        if (!transcriptionResult) {
-                            console.error('❌ No transcription in response');
-                            throw new Error('No transcription received from backend');
-                        }
-                        
-                        const processingTime = Math.round((Date.now() - startTime) / 1000);
-                        const wordCount = result.word_count || (transcriptionResult ? transcriptionResult.split(/\s+/).length : 0);
-                        
-                        console.log('📊 Transcription stats:', {
-                            wordCount,
-                            processingTime,
-                            previewMode: result.preview_mode,
-                            textLength: transcriptionResult.length
-                        });
-                        
-                        if (statusEl) statusEl.textContent = 'Transcription completed!';
-                        if (progressEl) {
-                            const modeText = result.preview_mode ? ` (${result.preview_duration}s preview)` : ' (full audio)';
-                            progressEl.textContent = `${wordCount} words transcribed in ${processingTime}s${modeText}`;
-                        }
-                        
-                        console.log('✅ Backend transcription successful');
-                    } else {
-                        clearInterval(timer); // Stop elapsed time updates
-                        console.error('❌ HTTP error:', response.status, response.statusText);
-                        const errorText = await response.text();
-                        console.error('❌ Error text:', errorText);
-                        throw new Error(`Backend error: ${response.status} - ${errorText}`);
-                    }
-                
-            } catch (error) {
-                clearInterval(timer); // Stop elapsed time updates
-                backendError = error;
-                console.log('Backend not available, using mock transcription:', error.message);
-                
-                // Backend failed, use enhanced mock transcription
-                if (statusEl) statusEl.textContent = 'Backend unavailable - generating sample...';
-                if (progressEl) progressEl.textContent = 'Creating mock transcription for testing...';
-                
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                if (isCancelledCallback()) return;
-                
-                // Create more realistic mock transcription based on file
-                const fileName = audioFile.name.replace(/\.[^/.]+$/, "");
-                const duration = previewMode ? '60 seconds' : 'full duration';
-                
-                transcriptionResult = `[Sample Transcription for "${fileName}"]
-
-This is a sample transcription generated for ${duration} of your audio file.
-
-In a real scenario, this would contain the actual transcribed text from your audio. The transcription would include:
-
-• Spoken words converted to text
-• Proper punctuation and formatting  
-• Paragraph breaks for natural speech flow
-• Highlighted Pali terms if detected
-
-Note: To get real transcription, please start the Whisper backend server.
-
-Audio file: ${audioFile.name}
-File size: ${(audioFile.size / 1024 / 1024).toFixed(2)} MB
-Mode: ${previewMode ? 'Preview (60 seconds)' : 'Full transcription'}
-Processed: ${new Date().toLocaleString()}`;
-            }
-            
-            if (isCancelledCallback()) return;
-            
-            if (statusEl) statusEl.textContent = 'Saving transcription...';
-            if (progressEl) progressEl.textContent = 'Updating project...';
-            
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Update project with transcription
-            projectManager.updateProject(projectId, {
-                transcription: transcriptionResult,
-                status: CONFIG.PROJECT_STATUS.NEEDS_REVIEW,
-                audioFileName: audioFile.name,
-                processedWithBackend: !backendError
-            });
-            
-            // Clean up modal
-            cleanup();
-            
-            // Clear timer
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
-            }
-            
-            // Refresh the projects list to show updated status
-            this.refreshProjectsList();
-            
-            // Show success message
-            const project = projectManager.getProject(projectId);
-            const backendNote = backendError ? ' (Sample transcription - start Whisper server for real transcription)' : ' (Real transcription)';
-            this.showSuccessMessage(`Transcription completed for "${project.name}"${backendNote}`);
-            
-        } catch (error) {
-            console.error('❌ Error in transcription process:', error);
-            cleanup();
-            
-            // Clear timer
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
-            }
-            
-            // Update project status to error
-            projectManager.updateProject(projectId, {
-                status: CONFIG.PROJECT_STATUS.ERROR,
-                error: error.message
-            });
-            
-            this.refreshProjectsList();
-            this.showErrorMessage(`Transcription failed: ${error.message}`);
-        }
-    }
-
-    // Show file size information and warnings
-    showFileSizeInfo(file) {
-        const fileSizeMB = file.size / (1024 * 1024);
-        const fileSizeFormatted = fileSizeMB < 1 
-            ? `${(file.size / 1024).toFixed(1)} KB` 
-            : `${fileSizeMB.toFixed(1)} MB`;
-        
-        console.log(`📁 Selected file: ${file.name} (${fileSizeFormatted})`);
-        
-        // Show warnings and time estimates for larger files
-        if (fileSizeMB > 10) {
-            const estimatedMinutes = Math.max(15, Math.ceil(fileSizeMB * 1.5));
-            const timeEstimate = estimatedMinutes > 60 
-                ? `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}m`
-                : `${estimatedMinutes}m`;
-            
-            let warningMessage = `Large file detected: ${fileSizeFormatted}`;
-            let warningType = 'info';
-            
-            if (fileSizeMB > 50) {
-                warningMessage = `⚠️ Very large file: ${fileSizeFormatted}<br>` +
-                    `<strong>Estimated processing time: ~${timeEstimate}</strong><br>` +
-                    `Consider using Preview Mode for testing, or ensure you have time for full processing.`;
-                warningType = 'error';
-            } else if (fileSizeMB > 25) {
-                warningMessage = `Large file: ${fileSizeFormatted}<br>` +
-                    `<strong>Estimated processing time: ~${timeEstimate}</strong><br>` +
-                    `Processing may take a while. Consider using Preview Mode first.`;
-                warningType = 'error';
-            } else {
-                warningMessage = `Medium file: ${fileSizeFormatted} - Estimated processing time: ~${timeEstimate}`;
-            }
-            
-            this.showNotification(warningMessage, warningType, 8000, true);
-        }
-    }
-
-    // Get estimated processing time for a file
-    getProcessingTimeEstimate(fileSizeMB, isPreview = false) {
-        if (isPreview) {
-            return "2-5 minutes"; // Preview is always fast
-        }
-        
-        const estimatedMinutes = Math.max(15, Math.ceil(fileSizeMB * 1.5));
-        if (estimatedMinutes > 60) {
-            const hours = Math.floor(estimatedMinutes / 60);
-            const minutes = estimatedMinutes % 60;
-            return `${hours}h ${minutes}m`;
-        }
-        return `${estimatedMinutes}m`;
-    }
-
-    // Backend status checking methods
-    async checkAndUpdateBackendStatus() {
-        console.log('🔍 Checking backend status...');
-        try {
-            // Simple backend status check
-            if (this.elements.backendStatusIndicator && this.elements.backendStatusText) {
-                this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
-                this.elements.backendStatusText.textContent = 'Checking backend status...';
-                
-                const isAvailable = await this.checkWhisperBackendAvailable();
-                
-                if (isAvailable) {
-                    this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-green-500';
-                    this.elements.backendStatusText.textContent = 'Whisper backend is running ✅';
-                    if (this.elements.backendInstructions) {
-                        this.elements.backendInstructions.classList.add('hidden');
-                    }
-                } else {
-                    this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
-                    this.elements.backendStatusText.textContent = 'Whisper backend not running (will use demo mode)';
-                    if (this.elements.backendInstructions) {
-                        this.elements.backendInstructions.classList.remove('hidden');
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Error checking backend status:', error);
-            if (this.elements.backendStatusIndicator && this.elements.backendStatusText) {
-                this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
-                this.elements.backendStatusText.textContent = 'Cannot connect to backend (will use demo mode)';
-            }
-        }
-    }
-
-    async checkWhisperBackendAvailable() {
-        try {
-            const response = await fetch(`${CONFIG.WHISPER.BACKEND_URL}/health`, {
-                method: 'GET',
-                timeout: 5000
-            });
-            return response.ok;
-        } catch (error) {
-            console.log('Backend not available:', error.message);
-            return false;
-        }
-    }
-
-    async autoStartWhisperBackend() {
-        console.log('🚀 Auto-starting Whisper backend...');
-        // This is a placeholder method for auto-starting the backend
-        // In practice, this would trigger the backend startup process
-        try {
-            await this.checkAndUpdateBackendStatus();
-        } catch (error) {
-            console.error('Error auto-starting backend:', error);
-        }
-    }
-
-    // Modal handling methods
-    showNewProjectModal() {
-        console.log('📋 Showing new project modal');
-        if (this.elements.newProjectModal) {
-            this.elements.newProjectModal.classList.remove('hidden');
-            // Focus on project name input
-            if (this.elements.projectName) {
-                setTimeout(() => this.elements.projectName.focus(), 100);
-            }
-        }
-    }
-
-    hideNewProjectModal() {
-        console.log('📋 Hiding new project modal');
-        if (this.elements.newProjectModal) {
-            this.elements.newProjectModal.classList.add('hidden');
-        }
-    }
-
-    // Project filtering and view management methods
-    refreshReviewProjectsList() {
-        console.log('🔄 Refreshing Ready for Review projects list');
-        const projects = projectManager.getAllProjects();
-        const reviewProjects = projects.filter(project => project.status === CONFIG.PROJECT_STATUS.NEEDS_REVIEW);
-        this.populateProjectsTable(reviewProjects, 'review');
-    }
-
-    refreshApprovedProjectsList() {
-        console.log('🔄 Refreshing Approved projects list');
-        const projects = projectManager.getAllProjects();
-        const approvedProjects = projects.filter(project => project.status === CONFIG.PROJECT_STATUS.APPROVED);
-        this.populateProjectsTable(approvedProjects, 'approved');
-    }
-
     // Clear projects by status with confirmation
     clearProjectsByStatus(status) {
         console.log(`🗑️ Clear projects with status: ${status} requested`);
         
-        const projects = projectManager.getAllProjects();
+        const projects = this.projectManager.getAllProjects();
         const filteredProjects = projects.filter(project => project.status === CONFIG.PROJECT_STATUS[status]);
         
         if (filteredProjects.length === 0) {
@@ -2413,7 +1292,7 @@ Processed: ${new Date().toLocaleString()}`;
         if (confirmed) {
             try {
                 filteredProjects.forEach(project => {
-                    projectManager.deleteProject(project.id);
+                    this.projectManager.deleteProject(project.id);
                 });
                 
                 // Refresh the appropriate view
@@ -2440,11 +1319,11 @@ Processed: ${new Date().toLocaleString()}`;
             
             let projects;
             if (viewType === 'review') {
-                projects = projectManager.getAllProjects().filter(p => p.status === CONFIG.PROJECT_STATUS.NEEDS_REVIEW);
+                projects = this.projectManager.getAllProjects().filter(p => p.status === CONFIG.PROJECT_STATUS.NEEDS_REVIEW);
             } else if (viewType === 'approved') {
-                projects = projectManager.getAllProjects().filter(p => p.status === CONFIG.PROJECT_STATUS.APPROVED);
+                projects = this.projectManager.getAllProjects().filter(p => p.status === CONFIG.PROJECT_STATUS.APPROVED);
             } else {
-                projects = projectManager.getAllProjects();
+                projects = this.projectManager.getAllProjects();
             }
             
             const filteredProjects = this.filterProjectsBySearch(projects, searchTerm);
@@ -2522,12 +1401,675 @@ Processed: ${new Date().toLocaleString()}`;
         console.log(`✅ Table populated with ${projects.length} projects for view: ${viewType}`);
     }
 
-    // ...existing code...
+    // Delete a specific project
+    async deleteProject(projectId) {
+        console.log('🗑️ Delete project requested for ID:', projectId);
+        
+        try {
+            const project = await this.projectManager.getProject(projectId);
+            if (!project) {
+                console.error('❌ Project not found:', projectId);
+                this.showErrorMessage('Project not found');
+                return;
+            }
+
+            console.log('🔍 Found project to delete:', project.name);
+
+            // Show confirmation dialog
+            const confirmed = confirm(`Are you sure you want to delete the project "${project.name}"?\n\nThis action cannot be undone.`);
+
+            if (confirmed) {
+                // If we're currently viewing this project, go back to projects list
+                if (this.currentProject && this.currentProject.id === projectId) {
+                    console.log('📤 Currently viewing project being deleted, returning to projects list');
+                    this.currentProject = null;
+                    this.showView('dashboard');
+                }
+
+                // Delete the project
+                await this.projectManager.deleteProject(projectId);
+                
+                // Refresh the projects list to remove the deleted project
+                await this.refreshProjectsList();
+                
+                // Show success message
+                this.showSuccessMessage(`Project "${project.name}" has been deleted`);
+                console.log('✅ Project deleted successfully:', project.name);
+            } else {
+                console.log('❌ Project deletion cancelled by user');
+            }
+
+        } catch (error) {
+            console.error('❌ Error deleting project:', error);
+            this.showErrorMessage(`Error deleting project: ${error.message}`);
+        }
+    }
+
+    // Download transcription for a specific project
+    downloadTranscription(projectId) {
+        console.log('📥 downloadTranscription() called for project:', projectId);
+        
+        try {
+            const project = this.projectManager.getProject(projectId);
+            if (!project) {
+                console.error('❌ Project not found:', projectId);
+                this.showErrorMessage('Project not found');
+                return;
+            }
+
+            console.log('✅ Found project for download:', project.name);
+            console.log('🔍 Available project fields:', Object.keys(project));
+
+            // Get the transcription text using the same priority as showReviewView
+            let transcriptionText = '';
+            
+            if (project.richContent) {
+                // Has saved rich content (HTML from editor)
+                transcriptionText = project.richContent;
+                console.log('📄 Using richContent (saved rich text)');
+            } else if (project.editedText) {
+                // Has edited plain text
+                transcriptionText = project.editedText;
+                console.log('📄 Using editedText (saved plain text)');
+            } else if (project.formattedText) {
+                // Has formatted text from processing
+                transcriptionText = project.formattedText;
+                console.log('📄 Using formattedText (processed text)');
+            } else if (project.transcription) {
+                // Has original transcription
+                transcriptionText = project.transcription;
+                console.log('📄 Using transcription (original)');
+            } else {
+                console.error('❌ No transcription content found in project');
+                console.log('❌ Project data:', {
+                    richContent: !!project.richContent,
+                    editedText: !!project.editedText,
+                    formattedText: !!project.formattedText,
+                    transcription: !!project.transcription
+                });
+                this.showErrorMessage('No transcription content available to download for this project');
+                return;
+            }
+
+            // Clean HTML if needed (convert to plain text)
+            const plainText = this.htmlToPlainText(transcriptionText);
+            
+            if (!plainText || plainText.trim().length === 0) {
+                console.error('❌ Transcription text is empty after processing');
+                this.showErrorMessage('Transcription content is empty');
+                return;
+            }
+
+            // Sanitize filename
+            const projectName = UTILS.sanitizeFilename(project.name);
+            const fileName = `${projectName}_Transcription.txt`;
+
+            // Create and download the file
+            const blob = new Blob([plainText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            console.log('📥 Downloaded transcription:', fileName);
+            console.log('📝 Content length:', plainText.length, 'characters');
+            this.showSuccessMessage(`Downloaded: ${fileName}`);
+
+        } catch (error) {
+            console.error('❌ Error downloading transcription:', error);
+            this.showErrorMessage('Failed to download transcription: ' + error.message);
+        }
+    }
+
+    // Helper method to convert HTML to plain text
+    htmlToPlainText(html) {
+        // Create a temporary div element
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        
+        // Extract text content
+        const plainText = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // Clean up and return
+        return plainText.trim();
+    }
+
+    // Initialize table sorting functionality
+    initTableSorting() {
+        const headers = document.querySelectorAll('.projects-table th[data-column]');
+        headers.forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', () => {
+                const column = header.dataset.column;
+                this.sortTable(column);
+            });
+        });
+    }
+
+    // Sort table by column
+    sortTable(column) {
+        // Toggle sort direction
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        this.sortColumn = column;
+
+        const projects = this.projectManager.getAllProjects();
+        projects.sort((a, b) => {
+            let aVal, bVal;
+            switch(column) {
+                case 'name':
+                    aVal = a.name.toLowerCase();
+                    bVal = b.name.toLowerCase();
+                    break;
+                case 'status':
+                    aVal = a.status;
+                    bVal = b.status;
+                    break;
+                case 'created':
+                    aVal = new Date(a.created);
+                    bVal = new Date(b.created);
+                    break;
+                case 'assigned':
+                    aVal = (a.assignedTo || 'ZZZ').toLowerCase(); // Put unassigned at end
+                    bVal = (b.assignedTo || 'ZZZ').toLowerCase();
+                    break;
+                default:
+                    return 0;
+            }
+            if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+        this.projectManager.projects = projects;
+        this.refreshProjectsList();
+        
+        // Update header indicators
+        document.querySelectorAll('.projects-table th[data-column]').forEach(th => {
+            th.classList.remove('sorted-asc', 'sorted-desc');
+        });
+        const currentHeader = document.querySelector(`th[data-column="${column}"]`);
+        if (currentHeader) {
+            currentHeader.classList.add(`sorted-${this.sortDirection}`);
+        }
+    }
+
+    // Add row selection functionality
+    initRowSelection() {
+        // Add click handler for table rows
+        document.addEventListener('click', (e) => {
+            const row = e.target.closest('.projects-table tbody tr');
+            if (row && !e.target.closest('.project-row-actions')) {
+                // Clear previous selections
+                document.querySelectorAll('.projects-table tbody tr').forEach(r => {
+                    r.classList.remove('selected');
+                });
+                // Select this row
+                row.classList.add('selected');
+            }
+        });
+    }
+
+    // Initialize Rich Text Editor
+    initializeRichTextEditor() {
+        console.log('🎨 Initializing Rich Text Editor...');
+        const toolbar = document.getElementById('editor-toolbar');
+        const editor = this.elements.transcriptionEditor;
+        const toggleSourceBtn = document.getElementById('toggle-source');
+        const sourceEditor = document.getElementById('transcription-source');
+
+        console.log('🔍 Rich Text Editor elements:', {
+            toolbar: !!toolbar,
+            editor: !!editor,
+            toggleSourceBtn: !!toggleSourceBtn,
+            sourceEditor: !!sourceEditor
+        });
+
+        if (!toolbar || !editor) {
+            console.error('❌ Rich Text Editor initialization failed - missing elements');
+            return;
+        }
+
+        console.log('✅ Rich Text Editor elements found, setting up...');
+        this.isSourceMode = false;
+
+        // Toolbar button handlers
+        toolbar.addEventListener('click', (e) => {
+            console.log('🖱️ Toolbar clicked:', e.target);
+            if (e.target.classList.contains('toolbar-btn') || e.target.classList.contains('toolbar-btn-sm') || e.target.closest('.toolbar-btn') || e.target.closest('.toolbar-btn-sm')) {
+                e.preventDefault();
+                const btn = (e.target.classList.contains('toolbar-btn') || e.target.classList.contains('toolbar-btn-sm')) ? e.target : (e.target.closest('.toolbar-btn') || e.target.closest('.toolbar-btn-sm'));
+                const command = btn.getAttribute('data-command');
+                console.log('🎯 Executing toolbar command:', command);
+                if (command && command !== 'removeFormat') {
+                    this.executeCommand(command, null);
+                } else if (command === 'removeFormat') {
+                    this.executeCommand('removeFormat', null);
+                } else if (command === 'unlink') {
+                    this.executeCommand('unlink', null);
+                }
+                this.updateToolbarState();
+            }
+        });
+
+        // Select dropdown handler
+        toolbar.addEventListener('change', (e) => {
+            if (e.target.classList.contains('toolbar-select') || e.target.classList.contains('toolbar-select-sm')) {
+                e.preventDefault();
+                const command = e.target.getAttribute('data-command');
+                const value = e.target.value;
+                if (command === 'formatBlock') {
+                    this.executeCommand(command, value === 'div' ? 'p' : value);
+                }
+                this.updateToolbarState();
+            }
+        });
+
+        // Toggle source mode
+        if (toggleSourceBtn) {
+            toggleSourceBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.toggleSourceMode();
+            });
+        }
+
+        // Update toolbar state on editor selection changes
+        editor.addEventListener('mouseup', () => this.updateToolbarState());
+        editor.addEventListener('keyup', () => this.updateToolbarState());
+
+        // Handle keyboard shortcuts
+        editor.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key.toLowerCase()) {
+                    case 'b':
+                        e.preventDefault();
+                        this.executeCommand('bold');
+                        this.updateToolbarState();
+                        break;
+                    case 'i':
+                        e.preventDefault();
+                        this.executeCommand('italic');
+                        this.updateToolbarState();
+                        break;
+                    case 'u':
+                        e.preventDefault();
+                        this.executeCommand('underline');
+                        this.updateToolbarState();
+                        break;
+                }    
+            }
+        });
+
+        // Prevent paste from bringing in unwanted formatting by default
+        editor.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            this.executeCommand('insertText', text);
+        });
+    }
+
+    // Execute rich text editing command
+    executeCommand(command, value = null) {
+        try {
+            if (!this.elements.transcriptionEditor) return;
+            
+            this.elements.transcriptionEditor.focus();
+            document.execCommand(command, false, value);
+            this.updateTranscriptionPreview();
+            this.updateWordCount();
+        } catch (error) {
+            console.error('❌ Error executing command:', command, error);
+        }
+    }
+
+    // Update toolbar button states
+    updateToolbarState() {
+        if (!this.elements.transcriptionEditor) return;
+        
+        try {
+            const toolbar = document.getElementById('editor-toolbar');
+            if (!toolbar) return;
+            
+            // Update button states based on current selection
+            const buttons = toolbar.querySelectorAll('[data-command]');
+            buttons.forEach(btn => {
+                const command = btn.getAttribute('data-command');
+                if (command && ['bold', 'italic', 'underline'].includes(command)) {
+                    if (document.queryCommandState(command)) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('❌ Error updating toolbar state:', error);
+        }
+    }
+
+    // Toggle between rich text and HTML source mode
+    toggleSourceMode() {
+        const editor = this.elements.transcriptionEditor;
+        const sourceEditor = document.getElementById('transcription-source');
+        if (!editor || !sourceEditor) return;
+        this.isSourceMode = !this.isSourceMode;
+        if (this.isSourceMode) {
+            // Switch to source mode
+            sourceEditor.value = editor.innerHTML;
+            editor.style.display = 'none';
+            sourceEditor.style.display = 'block';
+            sourceEditor.classList.remove('hidden');
+        } else {
+            // Switch back to rich text mode
+            editor.innerHTML = sourceEditor.value;
+            sourceEditor.style.display = 'none';
+            editor.style.display = 'block';
+            sourceEditor.classList.add('hidden');
+            this.updateTranscriptionPreview();
+            this.updateWordCount();
+        }
+    }
+
+    // Check and update backend status
+    async checkAndUpdateBackendStatus() {
+        console.log('🔍 Checking backend status...');
+        try {
+            // Simple backend status check
+            if (this.elements.backendStatusIndicator && this.elements.backendStatusText) {
+                this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
+                this.elements.backendStatusText.textContent = 'Checking backend status...';
+                
+                const isAvailable = await this.checkWhisperBackendAvailable();
+                
+                if (isAvailable) {
+                    this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-green-500';
+                    this.elements.backendStatusText.textContent = 'Whisper backend is running ✅';
+                    if (this.elements.backendInstructions) {
+                        this.elements.backendInstructions.classList.add('hidden');
+                    }
+                } else {
+                    this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                    this.elements.backendStatusText.textContent = 'Whisper backend not running (will use demo mode)';
+                    if (this.elements.backendInstructions) {
+                        this.elements.backendInstructions.classList.remove('hidden');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking backend status:', error);
+            if (this.elements.backendStatusIndicator && this.elements.backendStatusText) {
+                this.elements.backendStatusIndicator.className = 'w-3 h-3 rounded-full bg-red-500';
+                this.elements.backendStatusText.textContent = 'Cannot connect to backend (will use demo mode)';
+            }
+        }
+    }
+
+    // Check if Whisper backend is available
+    async checkWhisperBackendAvailable() {
+        try {
+            const response = await fetch(`${CONFIG.WHISPER.BACKEND_URL}/health`, {
+                method: 'GET',
+                timeout: 5000
+            });
+            return response.ok;
+        } catch (error) {
+            console.log('Backend not available:', error.message);
+            return false;
+        }
+    }
+
+    // Auto-start Whisper backend
+    async autoStartWhisperBackend() {
+        console.log('🚀 Auto-starting Whisper backend...');
+        try {
+            await this.checkAndUpdateBackendStatus();
+        } catch (error) {
+            console.error('Error auto-starting backend:', error);
+        }
+    }
+
+    // Set rich text content in editor
+    setRichTextContent(content, hasHTML = false) {
+        const editor = this.elements.transcriptionEditor;
+        if (!editor) return;
+        
+        if (hasHTML) {
+            editor.innerHTML = content;
+        } else {
+            editor.textContent = content;
+        }
+        
+        this.updateTranscriptionPreview();
+        this.updateWordCount();
+    }
+
+    // Update transcription preview
+    updateTranscriptionPreview() {
+        const editor = this.elements.transcriptionEditor;
+        const preview = document.getElementById('transcription-preview');
+        
+        if (editor && preview) {
+            preview.innerHTML = editor.innerHTML || editor.textContent || '';
+        }
+    }
+
+    // Update word count display
+    updateWordCount() {
+        const editor = this.elements.transcriptionEditor;
+        const wordCountElement = document.getElementById('word-count');
+        
+        if (editor && wordCountElement) {
+            const text = editor.textContent || editor.innerText || '';
+            const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+            wordCountElement.textContent = `${words.length} words`;
+        }
+    }
+
+    // Setup audio keyboard shortcuts
+    setupAudioKeyboardShortcuts() {
+        const audio = document.getElementById('review-audio');
+        if (!audio) return;
+        
+        document.addEventListener('keydown', (e) => {
+            // Only handle shortcuts when not typing in input fields
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') {
+                return;
+            }
+            
+            switch (e.key) {
+                case ' ':
+                    e.preventDefault();
+                    if (audio.paused) {
+                        audio.play();
+                    } else {
+                        audio.pause();
+                    }
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    audio.currentTime = Math.max(0, audio.currentTime - 10);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    audio.currentTime = Math.min(audio.duration, audio.currentTime + 10);
+                    break;
+            }
+        });
+    }
+
+    // Get processing time estimate
+    getProcessingTimeEstimate(fileSizeMB, previewMode = false) {
+        if (previewMode) {
+            return '~30 seconds';
+        }
+        
+        if (fileSizeMB < 5) {
+            return '1-2 minutes';
+        } else if (fileSizeMB < 20) {
+            return '3-5 minutes';
+        } else if (fileSizeMB < 50) {
+            return '5-10 minutes';
+        } else {
+            return '10+ minutes';
+        }
+    }
+
+    // Escape HTML for safe display
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Show new project modal
+    showNewProjectModal() {
+        console.log('🔔 showNewProjectModal called');
+        console.log('🔔 Modal element found:', !!this.elements.newProjectModal);
+        if (this.elements.newProjectModal) {
+            console.log('🔔 Modal classes before:', this.elements.newProjectModal.className);
+            this.elements.newProjectModal.classList.remove('hidden');
+            console.log('🔔 Modal classes after:', this.elements.newProjectModal.className);
+            // Force display style as backup
+            this.elements.newProjectModal.style.display = 'flex';
+            this.elements.newProjectModal.style.position = 'fixed';
+            this.elements.newProjectModal.style.top = '0';
+            this.elements.newProjectModal.style.left = '0';
+            this.elements.newProjectModal.style.right = '0';
+            this.elements.newProjectModal.style.bottom = '0';
+            this.elements.newProjectModal.style.backgroundColor = 'rgba(75, 85, 99, 0.5)';
+            this.elements.newProjectModal.style.zIndex = '9999';
+            this.elements.newProjectModal.style.alignItems = 'center';
+            this.elements.newProjectModal.style.justifyContent = 'center';
+            console.log('🔔 Modal forced styles applied');
+        } else {
+            console.error('❌ New project modal element not found!');
+        }
+    }
+
+    // Hide new project modal
+    hideNewProjectModal() {
+        if (this.elements.newProjectModal) {
+            this.elements.newProjectModal.classList.add('hidden');
+            this.elements.newProjectModal.style.display = 'none';
+        }
+    }
+
+    // Show transcription modal (for processing)
+    showTranscriptionModal(projectId, audioFile, previewMode, projectName) {
+        console.log('📝 Showing transcription modal for processing...');
+        this.showBackgroundProcessing(`Processing ${projectName}...`);
+        this.processProjectAudioBackground(projectId, audioFile, previewMode, projectName);
+    }
+
+    // Refresh review projects list
+    refreshReviewProjectsList() {
+        console.log('🔄 Refreshing review projects list');
+        const reviewProjects = this.projectManager.getAllProjects()
+            .filter(p => p.status === CONFIG.PROJECT_STATUS.NEEDS_REVIEW);
+        this.populateProjectsTable(reviewProjects, 'review');
+    }
+
+    // Refresh approved projects list
+    refreshApprovedProjectsList() {
+        console.log('🔄 Refreshing approved projects list');
+        const approvedProjects = this.projectManager.getAllProjects()
+            .filter(p => p.status === CONFIG.PROJECT_STATUS.APPROVED);
+        this.populateProjectsTable(approvedProjects, 'approved');
+    }
+
+    // Initialize local view (placeholder)
+    initializeLocalView() {
+        console.log('🔧 Initializing local view...');
+        // Placeholder for local view initialization
+    }
+
+    // Open a specific project for editing
+    openProject(projectId) {
+        console.log('📂 Opening project for editing:', projectId);
+        try {
+            const project = this.projectManager.getProject(projectId);
+            if (!project) {
+                this.showErrorMessage('Project not found');
+                return;
+            }
+            
+            this.showReviewView(project);
+        } catch (error) {
+            console.error('❌ Error opening project:', error);
+            this.showErrorMessage('Error opening project: ' + error.message);
+        }
+    }
+
+    // Show file size information and warnings
+    showFileSizeInfo(file) {
+        const fileSizeMB = file.size / (1024 * 1024);
+        const fileSizeFormatted = fileSizeMB < 1 
+            ? `${(file.size / 1024).toFixed(1)} KB` 
+            : `${fileSizeMB.toFixed(1)} MB`;
+        
+        console.log(`📁 Selected file: ${file.name} (${fileSizeFormatted})`);
+        
+        // Show warnings and time estimates for larger files
+        if (fileSizeMB > 10) {
+            const estimatedMinutes = Math.max(15, Math.ceil(fileSizeMB * 1.5));
+            const timeEstimate = estimatedMinutes > 60 
+                ? `${Math.floor(estimatedMinutes / 60)}h ${estimatedMinutes % 60}m`
+                : `${estimatedMinutes}m`;
+            
+            let warningMessage = `Large file detected: ${fileSizeFormatted}`;
+            let warningType = 'info';
+            
+            if (fileSizeMB > 50) {
+                warningMessage = `⚠️ Very large file: ${fileSizeFormatted}<br>` +
+                    `<strong>Estimated processing time: ~${timeEstimate}</strong><br>` +
+                    `Consider using Preview Mode for testing, or ensure you have time for full processing.`;
+                warningType = 'error';
+            } else if (fileSizeMB > 25) {
+                warningMessage = `Large file: ${fileSizeFormatted}<br>` +
+                    `<strong>Estimated processing time: ~${timeEstimate}</strong><br>` +
+                    `Processing may take a while. Consider using Preview Mode first.`;
+                warningType = 'error';
+            } else {
+                warningMessage = `Medium file: ${fileSizeFormatted} - Estimated processing time: ~${timeEstimate}`;
+            }
+            
+            this.showNotification(warningMessage, warningType, 8000, true);
+        }
+    }
+
+    // Cancel processing modal methods
+    showCancelProcessingModal() {
+        console.log('🛑 Showing cancel processing modal...');
+        if (this.elements.cancelProcessingModal) {
+            this.elements.cancelProcessingModal.classList.remove('hidden');
+        }
+    }
+    
+    hideCancelProcessingModal() {
+        console.log('✅ Hiding cancel processing modal...');
+        if (this.elements.cancelProcessingModal) {
+            this.elements.cancelProcessingModal.classList.add('hidden');
+        }
+    }
+    
+    confirmCancelProcessing() {
+        console.log('🛑 User confirmed cancelling processing...');
+        this.hideCancelProcessingModal();
+        this.cancelCurrentProcessing();
+    }
 }
+
+// Expose UIController to global scope
+window.UIController = UIController;
+
 // Initialize UI Controller when page loads
 let uiController;
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🔄 Initializing UI Controller...');
     uiController = new UIController();
+    window.uiController = uiController; // Also expose instance globally
     console.log('✅ UI Controller initialized');
 });

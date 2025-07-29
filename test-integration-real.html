@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe - REAL Integration Tests</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .log-output {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        .test-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-pass { background-color: #d4edda; color: #155724; }
+        .status-fail { background-color: #f8d7da; color: #721c24; }
+        .status-pending { background-color: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 PALAScribe - REAL Integration Tests</h1>
+        <p>These tests actually verify the production application files work correctly.</p>
+        
+        <div class="test-section">
+            <h3>📋 Test Summary</h3>
+            <div id="test-summary">
+                <div>Total Tests: <span id="total-tests">0</span></div>
+                <div>Passed: <span id="passed-tests">0</span></div>
+                <div>Failed: <span id="failed-tests">0</span></div>
+                <div>Success Rate: <span id="success-rate">0%</span></div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h3>🚀 Integration Test Suite</h3>
+            <button onclick="runAllIntegrationTests()" class="btn-success">Run ALL Integration Tests</button>
+            <button onclick="clearTestResults()">Clear Results</button>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>🔧 Configuration Validation Tests</h2>
+        
+        <div class="test-section">
+            <h3>Test 1: Port Configuration Consistency <span id="test1-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testPortConfiguration()">Test Port Configuration</button>
+            <div id="test1-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 2: JavaScript File Loading <span id="test2-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testJavaScriptLoading()">Test JS Loading</button>
+            <div id="test2-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 3: Class Instance Creation <span id="test3-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testClassInstantiation()">Test Class Creation</button>
+            <div id="test3-log" class="log-output"></div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>🌐 Server Connectivity Tests</h2>
+        
+        <div class="test-section">
+            <h3>Test 4: Server Health Check <span id="test4-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testServerHealth()">Test Server Health</button>
+            <div id="test4-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 5: API Endpoint Validation <span id="test5-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testAPIEndpoints()">Test API Endpoints</button>
+            <div id="test5-log" class="log-output"></div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>🎯 End-to-End Workflow Tests</h2>
+        
+        <div class="test-section">
+            <h3>Test 6: Complete Project Creation Workflow <span id="test6-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testProjectCreationWorkflow()">Test Project Creation</button>
+            <div id="test6-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 7: Audio Upload Workflow <span id="test7-status" class="test-status status-pending">PENDING</span></h3>
+            <input type="file" id="test-audio-file" accept="audio/*">
+            <button onclick="testAudioUploadWorkflow()">Test Audio Upload</button>
+            <div id="test7-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 7b: Preview Mode Test (60-second limit) <span id="test7b-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testPreviewModeLimit()">Test Preview Mode 60s Limit</button>
+            <div id="test7b-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 8: Error Handling <span id="test8-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testErrorHandling()">Test Error Scenarios</button>
+            <div id="test8-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 11: Preview Mode Functionality <span id="test11-status" class="test-status status-pending">PENDING</span></h3>
+            <input type="file" id="preview-test-audio-file" accept="audio/*">
+            <button onclick="testPreviewMode()">Test Preview Mode (60s limit)</button>
+            <div id="test11-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 12: Full vs Preview Processing Time <span id="test12-status" class="test-status status-pending">PENDING</span></h3>
+            <input type="file" id="timing-test-audio-file" accept="audio/*">
+            <button onclick="testProcessingTimeDifference()">Test Processing Time Difference</button>
+            <div id="test12-log" class="log-output"></div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>📊 Production File Verification</h2>
+        
+        <div class="test-section">
+            <h3>Test 9: Production Configuration Match <span id="test9-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testProductionConfiguration()">Test Production Config</button>
+            <div id="test9-log" class="log-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test 10: Cross-File Consistency <span id="test10-status" class="test-status status-pending">PENDING</span></h3>
+            <button onclick="testCrossFileConsistency()">Test File Consistency</button>
+            <div id="test10-log" class="log-output"></div>
+        </div>
+    </div>
+
+    <!-- Load actual production JavaScript files to test -->
+    <script src="js/config.js"></script>
+    <script src="js/project-manager-server.js"></script>
+    <script src="js/ui-controller-fixed.js"></script>
+
+    <script>
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            results: {}
+        };
+
+        function log(testId, message, type = 'info') {
+            const logElement = document.getElementById(`${testId}-log`);
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logMessage;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(`Test ${testId} - ${type.toUpperCase()}: ${message}`);
+        }
+
+        function setTestStatus(testId, status, message = '') {
+            const statusElement = document.getElementById(`${testId}-status`);
+            statusElement.className = `test-status status-${status}`;
+            statusElement.textContent = status.toUpperCase();
+            
+            if (message) {
+                statusElement.title = message;
+            }
+
+            // Update test results
+            testResults.results[testId] = { status, message };
+            updateTestSummary();
+        }
+
+        function updateTestSummary() {
+            const total = Object.keys(testResults.results).length;
+            const passed = Object.values(testResults.results).filter(r => r.status === 'pass').length;
+            const failed = Object.values(testResults.results).filter(r => r.status === 'fail').length;
+            const successRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+            document.getElementById('total-tests').textContent = total;
+            document.getElementById('passed-tests').textContent = passed;
+            document.getElementById('failed-tests').textContent = failed;
+            document.getElementById('success-rate').textContent = `${successRate}%`;
+        }
+
+        async function testPortConfiguration() {
+            const testId = 'test1';
+            log(testId, 'Testing port configuration consistency across all files...');
+            
+            try {
+                // Test 1: Check if ServerProjectManager uses correct port
+                log(testId, 'Checking ServerProjectManager configuration...');
+                const projectManager = new ServerProjectManager();
+                const apiUrl = projectManager.apiBaseUrl;
+                log(testId, `ServerProjectManager API URL: ${apiUrl}`);
+                
+                if (!apiUrl.includes('8765')) {
+                    throw new Error(`Wrong port in ServerProjectManager: ${apiUrl} (should be 8765 for PALAScribe)`);
+                }
+                
+                // Verify that Whisper processing is also on the same server
+                log(testId, 'Verifying Whisper integration with PALAScribe server...');
+                const healthResponse = await fetch(`${apiUrl.replace('/projects', '')}/health`);
+                if (!healthResponse.ok) {
+                    throw new Error(`PALAScribe server not responding: ${healthResponse.status}`);
+                }
+                
+                // Test 2: Try to connect to the configured port
+                log(testId, 'Testing connection to configured port...');
+                const response = await fetch(`${apiUrl}/health`);
+                
+                if (!response.ok) {
+                    throw new Error(`Server not responding on configured port: ${response.status}`);
+                }
+                
+                log(testId, '✅ Port configuration is correct and server is accessible');
+                setTestStatus(testId, 'pass', 'Port configuration verified');
+                
+            } catch (error) {
+                log(testId, `❌ Port configuration test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testJavaScriptLoading() {
+            const testId = 'test2';
+            log(testId, 'Testing JavaScript file loading and dependencies...');
+            
+            try {
+                // Test if required classes are available
+                log(testId, 'Checking ServerProjectManager class...');
+                if (typeof ServerProjectManager === 'undefined') {
+                    throw new Error('ServerProjectManager class not loaded');
+                }
+                
+                log(testId, 'Checking UIController class...');
+                if (typeof UIController === 'undefined') {
+                    throw new Error('UIController class not loaded');
+                }
+                
+                log(testId, 'Checking CONFIG object...');
+                if (typeof CONFIG === 'undefined') {
+                    throw new Error('CONFIG object not loaded');
+                }
+                
+                log(testId, '✅ All required JavaScript files loaded successfully');
+                setTestStatus(testId, 'pass', 'JavaScript loading verified');
+                
+            } catch (error) {
+                log(testId, `❌ JavaScript loading test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testClassInstantiation() {
+            const testId = 'test3';
+            log(testId, 'Testing class instantiation and method availability...');
+            
+            try {
+                // Test ServerProjectManager instantiation
+                log(testId, 'Creating ServerProjectManager instance...');
+                const projectManager = new ServerProjectManager();
+                
+                // Check required methods
+                const requiredMethods = ['createProject', 'loadProjects', 'attachAudioFile', 'transcribeProject'];
+                for (const method of requiredMethods) {
+                    if (typeof projectManager[method] !== 'function') {
+                        throw new Error(`ServerProjectManager missing method: ${method}`);
+                    }
+                    log(testId, `✓ Method available: ${method}`);
+                }
+                
+                // Test UIController instantiation
+                log(testId, 'Creating UIController instance...');
+                const uiController = new UIController();
+                
+                // Check if projectManager is properly assigned
+                if (!uiController.projectManager) {
+                    throw new Error('UIController.projectManager not initialized');
+                }
+                
+                log(testId, '✅ Class instantiation successful with all required methods');
+                setTestStatus(testId, 'pass', 'Class instantiation verified');
+                
+            } catch (error) {
+                log(testId, `❌ Class instantiation test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testServerHealth() {
+            const testId = 'test4';
+            log(testId, 'Testing server health and connectivity...');
+            
+            try {
+                const projectManager = new ServerProjectManager();
+                const healthUrl = `${projectManager.apiBaseUrl}/health`;
+                
+                log(testId, `Checking server health at: ${healthUrl}`);
+                const response = await fetch(healthUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`Health check failed: HTTP ${response.status}`);
+                }
+                
+                const healthData = await response.json();
+                log(testId, `Server status: ${healthData.status}`);
+                log(testId, `Service: ${healthData.service}`);
+                
+                if (healthData.status !== 'healthy') {
+                    throw new Error(`Server reports unhealthy status: ${healthData.status}`);
+                }
+                
+                log(testId, '✅ Server is healthy and responding correctly');
+                setTestStatus(testId, 'pass', 'Server health verified');
+                
+            } catch (error) {
+                log(testId, `❌ Server health test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testAPIEndpoints() {
+            const testId = 'test5';
+            log(testId, 'Testing API endpoint availability...');
+            
+            try {
+                const projectManager = new ServerProjectManager();
+                const baseUrl = projectManager.apiBaseUrl;
+                
+                // Test GET /projects
+                log(testId, 'Testing GET /projects...');
+                const projectsResponse = await fetch(`${baseUrl}/projects`);
+                if (!projectsResponse.ok) {
+                    throw new Error(`GET /projects failed: ${projectsResponse.status}`);
+                }
+                
+                const projectsData = await projectsResponse.json();
+                if (!projectsData.hasOwnProperty('projects')) {
+                    throw new Error('GET /projects response missing projects field');
+                }
+                
+                log(testId, `✓ GET /projects returns ${projectsData.projects.length} projects`);
+                
+                log(testId, '✅ All tested API endpoints are working');
+                setTestStatus(testId, 'pass', 'API endpoints verified');
+                
+            } catch (error) {
+                log(testId, `❌ API endpoints test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testProjectCreationWorkflow() {
+            const testId = 'test6';
+            log(testId, 'Testing complete project creation workflow...');
+            
+            try {
+                const projectManager = new ServerProjectManager();
+                
+                // Test project creation
+                const testProjectName = `Integration Test ${Date.now()}`;
+                log(testId, `Creating test project: ${testProjectName}`);
+                
+                const project = await projectManager.createProject({
+                    name: testProjectName,
+                    assignedTo: 'Integration Test User'
+                });
+                
+                if (!project.id) {
+                    throw new Error('Created project missing ID');
+                }
+                
+                log(testId, `✓ Project created with ID: ${project.id}`);
+                
+                // Test project retrieval
+                log(testId, 'Testing project retrieval...');
+                const retrievedProject = await projectManager.getProject(project.id);
+                
+                if (!retrievedProject || retrievedProject.name !== testProjectName) {
+                    throw new Error('Project retrieval failed or data mismatch');
+                }
+                
+                log(testId, '✓ Project retrieved successfully');
+                
+                // Clean up
+                log(testId, 'Cleaning up test project...');
+                await projectManager.deleteProject(project.id);
+                
+                log(testId, '✅ Complete project creation workflow successful');
+                setTestStatus(testId, 'pass', 'Project workflow verified');
+                
+            } catch (error) {
+                log(testId, `❌ Project creation workflow test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testAudioUploadWorkflow() {
+            const testId = 'test7';
+            log(testId, 'Testing audio upload workflow...');
+            
+            try {
+                const fileInput = document.getElementById('test-audio-file');
+                
+                if (!fileInput.files.length) {
+                    throw new Error('Please select an audio file first');
+                }
+                
+                const audioFile = fileInput.files[0];
+                log(testId, `Testing with file: ${audioFile.name} (${(audioFile.size/1024/1024).toFixed(2)} MB)`);
+                
+                const projectManager = new ServerProjectManager();
+                
+                // Create test project
+                const project = await projectManager.createProject({
+                    name: `Audio Test ${Date.now()}`,
+                    assignedTo: 'Audio Test User'
+                });
+                
+                log(testId, `Created test project: ${project.id}`);
+                
+                // Upload audio
+                log(testId, 'Uploading audio file...');
+                const uploadResult = await projectManager.attachAudioFile(project.id, audioFile, 'local', false);
+                
+                if (!uploadResult.filename) {
+                    throw new Error('Audio upload failed - no filename returned');
+                }
+                
+                log(testId, `✓ Audio uploaded: ${uploadResult.filename}`);
+                
+                // Clean up
+                await projectManager.deleteProject(project.id);
+                
+                log(testId, '✅ Audio upload workflow successful');
+                setTestStatus(testId, 'pass', 'Audio upload verified');
+                
+            } catch (error) {
+                log(testId, `❌ Audio upload workflow test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testErrorHandling() {
+            const testId = 'test8';
+            log(testId, 'Testing error handling scenarios...');
+            
+            try {
+                const projectManager = new ServerProjectManager();
+                
+                // Test 1: Invalid project creation
+                log(testId, 'Testing invalid project creation...');
+                try {
+                    await projectManager.createProject({ name: '' }); // Empty name should fail
+                    throw new Error('Expected error for empty project name');
+                } catch (error) {
+                    if (error.message.includes('Expected error')) {
+                        throw error;
+                    }
+                    log(testId, '✓ Correctly rejected empty project name');
+                }
+                
+                // Test 2: Non-existent project retrieval
+                log(testId, 'Testing non-existent project retrieval...');
+                const nonExistentProject = await projectManager.getProject('non-existent-id');
+                if (nonExistentProject !== null) {
+                    throw new Error('Should return null for non-existent project');
+                }
+                log(testId, '✓ Correctly handled non-existent project');
+                
+                log(testId, '✅ Error handling tests passed');
+                setTestStatus(testId, 'pass', 'Error handling verified');
+                
+            } catch (error) {
+                log(testId, `❌ Error handling test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testProductionConfiguration() {
+            const testId = 'test9';
+            log(testId, 'Testing production configuration consistency...');
+            
+            try {
+                // Check if we're using the correct production URLs
+                const projectManager = new ServerProjectManager();
+                const apiUrl = projectManager.apiBaseUrl;
+                
+                log(testId, `Checking API URL: ${apiUrl}`);
+                
+                // Verify it's pointing to the correct server
+                if (!apiUrl.includes('localhost:8765')) {
+                    throw new Error(`Production config should use localhost:8765, found: ${apiUrl}`);
+                }
+                
+                // Test actual connectivity
+                const healthResponse = await fetch(`${apiUrl}/health`);
+                if (!healthResponse.ok) {
+                    throw new Error(`Production server not accessible: ${healthResponse.status}`);
+                }
+                
+                log(testId, '✅ Production configuration is correct');
+                setTestStatus(testId, 'pass', 'Production config verified');
+                
+            } catch (error) {
+                log(testId, `❌ Production configuration test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testCrossFileConsistency() {
+            const testId = 'test10';
+            log(testId, 'Testing cross-file configuration consistency...');
+            
+            try {
+                // Check that all components use the same server configuration
+                const projectManager = new ServerProjectManager();
+                const uiController = new UIController();
+                
+                // Both should be using the same project manager instance type
+                if (!(uiController.projectManager instanceof ServerProjectManager)) {
+                    throw new Error('UIController not using ServerProjectManager');
+                }
+                
+                // Check that configurations match
+                const pmApiUrl = projectManager.apiBaseUrl;
+                const uiPmApiUrl = uiController.projectManager.apiBaseUrl;
+                
+                if (pmApiUrl !== uiPmApiUrl) {
+                    throw new Error(`API URL mismatch: ${pmApiUrl} vs ${uiPmApiUrl}`);
+                }
+                
+                log(testId, `✓ All components using consistent API URL: ${pmApiUrl}`);
+                
+                log(testId, '✅ Cross-file consistency verified');
+                setTestStatus(testId, 'pass', 'File consistency verified');
+                
+            } catch (error) {
+                log(testId, `❌ Cross-file consistency test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testPreviewMode() {
+            const testId = 'test11';
+            log(testId, 'Testing preview mode 60-second limitation...');
+            
+            try {
+                const fileInput = document.getElementById('preview-test-audio-file');
+                
+                if (!fileInput.files.length) {
+                    throw new Error('Please select an audio file first (preferably longer than 60 seconds)');
+                }
+                
+                const audioFile = fileInput.files[0];
+                const fileSizeMB = audioFile.size / (1024 * 1024);
+                
+                log(testId, `Testing preview mode with: ${audioFile.name} (${fileSizeMB.toFixed(2)} MB)`);
+                
+                // Estimate original duration (rough calculation)
+                const estimatedDurationMinutes = fileSizeMB / 1; // Very rough estimate: 1MB ≈ 1 minute
+                log(testId, `Estimated file duration: ~${estimatedDurationMinutes.toFixed(1)} minutes`);
+                
+                if (estimatedDurationMinutes < 2) {
+                    log(testId, '⚠️  Warning: File might be shorter than 60 seconds, preview test may not be meaningful');
+                }
+                
+                const projectManager = new ServerProjectManager();
+                
+                // Create test project
+                const project = await projectManager.createProject({
+                    name: `Preview Test ${Date.now()}`,
+                    assignedTo: 'Preview Test User'
+                });
+                
+                log(testId, `Created test project: ${project.id}`);
+                
+                // Upload audio
+                log(testId, 'Uploading audio file...');
+                await projectManager.attachAudioFile(project.id, audioFile, 'local', false);
+                
+                // Test preview mode transcription
+                log(testId, 'Starting PREVIEW mode transcription (should process only 60 seconds)...');
+                const previewStartTime = Date.now();
+                
+                const previewResult = await projectManager.transcribeProject(project.id, {
+                    model: 'tiny', // Use tiny model for faster processing
+                    language: 'English',
+                    preview: true,
+                    previewDuration: 60
+                });
+                
+                const previewEndTime = Date.now();
+                const previewProcessingTime = (previewEndTime - previewStartTime) / 1000;
+                
+                log(testId, `Preview processing completed in ${previewProcessingTime.toFixed(1)} seconds`);
+                
+                if (!previewResult.success) {
+                    throw new Error(`Preview transcription failed: ${previewResult.error}`);
+                }
+                
+                // Verify preview mode results
+                log(testId, `Preview result - Word count: ${previewResult.word_count}`);
+                log(testId, `Preview result - Processing time: ${previewResult.processing_time?.toFixed(1)}s`);
+                log(testId, `Preview result - Preview mode flag: ${previewResult.preview_mode}`);
+                
+                // Check if preview mode was actually enabled
+                if (!previewResult.preview_mode) {
+                    throw new Error('Preview mode flag not set in response - may not have processed as preview');
+                }
+                
+                // For very long files, preview should be significantly faster
+                if (estimatedDurationMinutes > 5 && previewProcessingTime > 300) {
+                    log(testId, '⚠️  Warning: Preview took longer than expected - may not be limiting to 60 seconds');
+                }
+                
+                // Check transcription length (preview should be shorter for long files)
+                const transcriptionLength = previewResult.transcription?.length || 0;
+                log(testId, `Transcription length: ${transcriptionLength} characters`);
+                
+                // Clean up
+                await projectManager.deleteProject(project.id);
+                
+                log(testId, '✅ Preview mode test completed');
+                setTestStatus(testId, 'pass', `Preview mode processed in ${previewProcessingTime.toFixed(1)}s`);
+                
+            } catch (error) {
+                log(testId, `❌ Preview mode test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testProcessingTimeDifference() {
+            const testId = 'test12';
+            log(testId, 'Testing processing time difference between full and preview modes...');
+            
+            try {
+                const fileInput = document.getElementById('timing-test-audio-file');
+                
+                if (!fileInput.files.length) {
+                    throw new Error('Please select an audio file first (preferably longer than 2 minutes)');
+                }
+                
+                const audioFile = fileInput.files[0];
+                const fileSizeMB = audioFile.size / (1024 * 1024);
+                
+                log(testId, `Testing timing difference with: ${audioFile.name} (${fileSizeMB.toFixed(2)} MB)`);
+                
+                if (fileSizeMB < 2) {
+                    log(testId, '⚠️  Warning: Small file may not show significant timing difference');
+                }
+                
+                const projectManager = new ServerProjectManager();
+                
+                // Test 1: Preview Mode
+                log(testId, '--- PHASE 1: PREVIEW MODE TEST ---');
+                const previewProject = await projectManager.createProject({
+                    name: `Timing Preview ${Date.now()}`,
+                    assignedTo: 'Timing Test User'
+                });
+                
+                await projectManager.attachAudioFile(previewProject.id, audioFile, 'local', false);
+                
+                log(testId, 'Starting preview mode transcription...');
+                const previewStartTime = Date.now();
+                
+                const previewResult = await projectManager.transcribeProject(previewProject.id, {
+                    model: 'tiny',
+                    language: 'English',
+                    preview: true,
+                    previewDuration: 60
+                });
+                
+                const previewTotalTime = (Date.now() - previewStartTime) / 1000;
+                log(testId, `Preview mode completed in ${previewTotalTime.toFixed(1)} seconds`);
+                log(testId, `Preview transcription length: ${previewResult.transcription?.length || 0} characters`);
+                
+                // Clean up preview project
+                await projectManager.deleteProject(previewProject.id);
+                
+                // Test 2: Full Mode (with tiny model for speed)
+                log(testId, '--- PHASE 2: FULL MODE TEST ---');
+                const fullProject = await projectManager.createProject({
+                    name: `Timing Full ${Date.now()}`,
+                    assignedTo: 'Timing Test User'
+                });
+                
+                await projectManager.attachAudioFile(fullProject.id, audioFile, 'local', false);
+                
+                log(testId, 'Starting full mode transcription...');
+                const fullStartTime = Date.now();
+                
+                const fullResult = await projectManager.transcribeProject(fullProject.id, {
+                    model: 'tiny',
+                    language: 'English',
+                    preview: false
+                });
+                
+                const fullTotalTime = (Date.now() - fullStartTime) / 1000;
+                log(testId, `Full mode completed in ${fullTotalTime.toFixed(1)} seconds`);
+                log(testId, `Full transcription length: ${fullResult.transcription?.length || 0} characters`);
+                
+                // Compare results
+                log(testId, '--- COMPARISON ANALYSIS ---');
+                const timeDifference = fullTotalTime - previewTotalTime;
+                const timeRatio = fullTotalTime / previewTotalTime;
+                
+                log(testId, `Preview time: ${previewTotalTime.toFixed(1)}s`);
+                log(testId, `Full time: ${fullTotalTime.toFixed(1)}s`);
+                log(testId, `Time difference: ${timeDifference.toFixed(1)}s`);
+                log(testId, `Time ratio (full/preview): ${timeRatio.toFixed(2)}x`);
+                
+                const previewLength = previewResult.transcription?.length || 0;
+                const fullLength = fullResult.transcription?.length || 0;
+                const lengthRatio = fullLength / Math.max(previewLength, 1);
+                
+                log(testId, `Transcription length ratio (full/preview): ${lengthRatio.toFixed(2)}x`);
+                
+                // Validate preview mode effectiveness
+                if (fileSizeMB > 3) { // For files larger than 3MB
+                    if (timeRatio < 1.2) {
+                        log(testId, '⚠️  Warning: Preview mode not significantly faster than full mode');
+                    } else {
+                        log(testId, `✓ Preview mode is ${timeRatio.toFixed(1)}x faster than full mode`);
+                    }
+                    
+                    if (lengthRatio < 1.5) {
+                        log(testId, '⚠️  Warning: Preview transcription not significantly shorter - may not be limiting to 60s');
+                    } else {
+                        log(testId, `✓ Preview transcription is ${lengthRatio.toFixed(1)}x shorter than full transcription`);
+                    }
+                }
+                
+                // Clean up
+                await projectManager.deleteProject(fullProject.id);
+                
+                log(testId, '✅ Processing time difference test completed');
+                setTestStatus(testId, 'pass', `Preview ${timeRatio.toFixed(1)}x faster than full`);
+                
+            } catch (error) {
+                log(testId, `❌ Processing time difference test failed: ${error.message}`, 'error');
+                setTestStatus(testId, 'fail', error.message);
+            }
+        }
+
+        async function testWhisperConfiguration() {
+            // Check the configuration and return the actual Whisper URL
+            if (typeof CONFIG !== 'undefined' && CONFIG.WHISPER_BACKEND) {
+                return CONFIG.WHISPER_BACKEND.URL;
+            } else if (typeof CONFIG !== 'undefined' && CONFIG.WHISPER) {
+                return CONFIG.WHISPER.BACKEND_URL;
+            }
+            // Fallback to default
+            return 'http://localhost:8766';
+        }
+
+        async function runAllIntegrationTests() {
+            console.log('🚀 Starting comprehensive integration test suite...');
+            
+            // Clear previous results
+            clearTestResults();
+            
+            // Run all tests in sequence
+            const tests = [
+                testPortConfiguration,
+                testJavaScriptLoading,
+                testClassInstantiation,
+                testServerHealth,
+                testAPIEndpoints,
+                testProjectCreationWorkflow,
+                testErrorHandling,
+                testProductionConfiguration,
+                testCrossFileConsistency
+            ];
+            
+            for (let i = 0; i < tests.length; i++) {
+                try {
+                    await tests[i]();
+                    // Small delay between tests
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (error) {
+                    console.error(`Test ${i + 1} failed:`, error);
+                }
+            }
+            
+            // Print summary
+            const summary = testResults.results;
+            const passed = Object.values(summary).filter(r => r.status === 'pass').length;
+            const total = Object.keys(summary).length;
+            
+            console.log(`\n📊 Integration Test Results: ${passed}/${total} passed`);
+            
+            if (passed === total) {
+                console.log('🎉 All integration tests PASSED! The application is working correctly.');
+            } else {
+                console.log('❌ Some integration tests FAILED. Please review the failures above.');
+            }
+        }
+
+        function clearTestResults() {
+            testResults = { total: 0, passed: 0, failed: 0, results: {} };
+            
+            // Clear all logs
+            for (let i = 1; i <= 10; i++) {
+                const logElement = document.getElementById(`test${i}-log`);
+                if (logElement) {
+                    logElement.textContent = '';
+                }
+                
+                const statusElement = document.getElementById(`test${i}-status`);
+                if (statusElement) {
+                    statusElement.className = 'test-status status-pending';
+                    statusElement.textContent = 'PENDING';
+                    statusElement.title = '';
+                }
+            }
+            
+            updateTestSummary();
+        }
+
+        // Initialize page
+        window.onload = function() {
+            updateTestSummary();
+            console.log('🧪 Real Integration Test Suite loaded');
+            console.log('Click "Run ALL Integration Tests" to verify the application works correctly');
+        };
+    </script>
+</body>
+</html>

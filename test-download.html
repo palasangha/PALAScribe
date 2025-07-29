@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Function Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">Download Function Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test downloadTranscription Method</h2>
+            
+            <div class="space-y-4">
+                <button id="test-download-method" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Test downloadTranscription Method Exists
+                </button>
+                
+                <button id="create-test-project" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Create Test Project
+                </button>
+                
+                <button id="test-download-call" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    Test Download Call
+                </button>
+            </div>
+            
+            <div id="test-results" class="mt-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Test Results:</h3>
+                <div id="results-content">Click buttons above to run tests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load all required scripts -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/pali-dictionary.js?v=20250721n"></script>
+    <script src="js/audio-processor.js?v=20250721l"></script>
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script src="js/ui-controller-fixed.js?v=20250729b"></script>
+    <script src="js/app.js?v=20250723b"></script>
+
+    <script>
+        let testProjectId = null;
+
+        function log(message, type = 'info') {
+            const resultsContent = document.getElementById('results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-blue-600';
+            resultsContent.innerHTML += `<div class="${color}">${message}</div>`;
+        }
+
+        function clearResults() {
+            document.getElementById('results-content').innerHTML = '';
+        }
+
+        // Wait for everything to load
+        window.addEventListener('load', () => {
+            // Test downloadTranscription method existence
+            document.getElementById('test-download-method').addEventListener('click', () => {
+                clearResults();
+                log('Testing downloadTranscription method...');
+                
+                if (window.uiController && typeof window.uiController.downloadTranscription === 'function') {
+                    log('✅ downloadTranscription method is available', 'success');
+                } else {
+                    log('❌ downloadTranscription method is NOT available', 'error');
+                }
+                
+                if (typeof projectManager !== 'undefined') {
+                    log('✅ projectManager is available', 'success');
+                } else {
+                    log('❌ projectManager is NOT available', 'error');
+                }
+            });
+
+            // Create test project
+            document.getElementById('create-test-project').addEventListener('click', () => {
+                clearResults();
+                log('Creating test project...');
+                
+                try {
+                    const testProject = {
+                        name: 'Test Download Project',
+                        assignedTo: 'Test User'
+                    };
+                    
+                    // Create project using projectManager
+                    if (typeof projectManager !== 'undefined') {
+                        const project = projectManager.createProject(testProject);
+                        testProjectId = project.id;
+                        
+                        // Add some transcription content using the updateProject method
+                        const transcriptionData = {
+                            transcription: 'This is a test transcription from the original processing.',
+                            formattedText: 'This is formatted test text with some basic formatting.',
+                            editedText: 'This is edited test text that a user might have modified.',
+                            richContent: '<p>This is <strong>rich content</strong> with <em>HTML formatting</em> that includes <u>underlined text</u>.</p>',
+                            status: 'COMPLETED'
+                        };
+                        
+                        projectManager.updateProject(project.id, transcriptionData);
+                        
+                        log(`✅ Test project created with ID: ${testProjectId}`, 'success');
+                        log(`✅ Project name: ${project.name}`, 'info');
+                        log(`✅ Added transcription content to project`, 'success');
+                    } else {
+                        log('❌ Cannot create project - projectManager not available', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Error creating test project: ${error.message}`, 'error');
+                }
+            });
+
+            // Test download call
+            document.getElementById('test-download-call').addEventListener('click', () => {
+                clearResults();
+                log('Testing download call...');
+                
+                if (!testProjectId) {
+                    log('❌ No test project available. Create a test project first.', 'error');
+                    return;
+                }
+                
+                try {
+                    if (window.uiController && typeof window.uiController.downloadTranscription === 'function') {
+                        log(`📥 Calling downloadTranscription with project ID: ${testProjectId}`);
+                        window.uiController.downloadTranscription(testProjectId);
+                        log('✅ Download method called successfully!', 'success');
+                        log('📄 Check your Downloads folder for the file', 'info');
+                    } else {
+                        log('❌ downloadTranscription method not available', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Error during download: ${error.message}`, 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

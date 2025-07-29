@@ -49,9 +49,9 @@ const CONFIG = {
         }
     },
 
-    // Local Whisper Backend Configuration
+    // Local Whisper Backend Configuration (now integrated into PALAScribe server)
     WHISPER_BACKEND: {
-        URL: 'http://localhost:8765/process',
+        URL: 'http://localhost:8765/process', // Consolidated into PALAScribe server
         TIMEOUT: 1800000, // 30 minutes timeout (1800 seconds) - for very large audio files
         MODELS: ['tiny', 'small', 'medium', 'large'],
         DEFAULT_MODEL: 'medium',
@@ -61,7 +61,7 @@ const CONFIG = {
 
     // WHISPER configuration (alternative naming used in some parts of code)
     WHISPER: {
-        BACKEND_URL: 'http://localhost:8765',
+        BACKEND_URL: 'http://localhost:8765', // Consolidated into PALAScribe server
         TIMEOUT: 1800000,
         DEFAULT_MODEL: 'medium'
     },

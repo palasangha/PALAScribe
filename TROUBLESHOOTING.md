@@ -26,11 +26,11 @@ pip list | grep whisper
 
 #### Check for Port Conflicts
 ```bash
-# Check if port 8000 is in use
-lsof -i :8000
+# Check if port 8765 is in use
+lsof -i :8765
 
-# If another process is using port 8000, kill it
-sudo lsof -i :8000
+# If another process is using port 8765, kill it
+sudo lsof -i :8765
 # Then kill the process using the PID shown
 ```
 
@@ -100,8 +100,8 @@ tail -50 whisper_server.log
 
 **Error: "Address already in use"**
 ```bash
-# Find and kill process using port 8000
-lsof -i :8000
+# Find and kill process using port 8765
+lsof -i :8765
 kill -9 <PID>
 ```
 
@@ -131,10 +131,10 @@ chmod 644 whisper_server.py
 #### Test Backend Connection
 ```bash
 # Test health endpoint
-curl -v http://localhost:8000/health
+curl -v http://localhost:8765/health
 
 # Test from browser
-# Open: http://localhost:8000/health
+# Open: http://localhost:8765/health
 ```
 
 #### Check Firewall/Security
@@ -208,7 +208,7 @@ python3 -c "import whisper; print('Installation successful')"
 ./auto-whisper.sh logs
 
 # Test health endpoint
-curl http://localhost:8000/health
+curl http://localhost:8765/health
 
 # Check process
 ps aux | grep whisper_server
@@ -238,4 +238,4 @@ source whisper-env/bin/activate
 python3 whisper_server.py
 ```
 
-The server should start on http://localhost:8000
+The server should start on http://localhost:8765

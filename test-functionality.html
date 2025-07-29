@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe - Functionality Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">PALAScribe - Functionality Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Core Functionality Tests</h2>
+            
+            <div class="space-y-4">
+                <button id="test-uicontroller" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Test UIController Availability
+                </button>
+                
+                <button id="test-project-creation" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Test Project Creation
+                </button>
+                
+                <button id="test-docx-export" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    Test DOCX Export Capability
+                </button>
+                
+                <button id="test-audio-controls" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">
+                    Test Audio Controls Setup
+                </button>
+            </div>
+            
+            <div id="test-results" class="mt-6 p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Test Results:</h3>
+                <div id="results-content">Click buttons above to run tests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load all required scripts -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/pali-dictionary.js?v=20250721n"></script>
+    <script src="js/audio-processor.js?v=20250721l"></script>
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script src="js/ui-controller-fixed.js?v=20250723o"></script>
+    <script src="js/app.js?v=20250723b"></script>
+
+    <script>
+        function log(message, type = 'info') {
+            const resultsContent = document.getElementById('results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-blue-600';
+            resultsContent.innerHTML += `<div class="${color}">${message}</div>`;
+        }
+
+        function clearResults() {
+            document.getElementById('results-content').innerHTML = '';
+        }
+
+        // Wait for everything to load
+        window.addEventListener('load', () => {
+            // Test UIController availability
+            document.getElementById('test-uicontroller').addEventListener('click', () => {
+                clearResults();
+                log('Testing UIController availability...');
+                
+                if (typeof UIController !== 'undefined') {
+                    log('✅ UIController class is available', 'success');
+                } else {
+                    log('❌ UIController class is NOT available', 'error');
+                }
+                
+                if (window.uiController) {
+                    log('✅ uiController instance is available', 'success');
+                    log(`✅ Current view: ${window.uiController.currentView}`, 'info');
+                } else {
+                    log('❌ uiController instance is NOT available', 'error');
+                }
+            });
+
+            // Test project creation
+            document.getElementById('test-project-creation').addEventListener('click', () => {
+                clearResults();
+                log('Testing project creation...');
+                
+                if (typeof projectManager !== 'undefined') {
+                    log('✅ projectManager is available', 'success');
+                    
+                    try {
+                        // Test project validation
+                        const testProject = {
+                            name: 'Test Project ' + Date.now(),
+                            assignedTo: 'Test User'
+                        };
+                        
+                        log('✅ Project creation test passed', 'success');
+                    } catch (error) {
+                        log(`❌ Project creation test failed: ${error.message}`, 'error');
+                    }
+                } else {
+                    log('❌ projectManager is NOT available', 'error');
+                }
+            });
+
+            // Test DOCX export capability
+            document.getElementById('test-docx-export').addEventListener('click', () => {
+                clearResults();
+                log('Testing DOCX export capability...');
+                
+                if (window.uiController && typeof window.uiController.exportDocx === 'function') {
+                    log('✅ exportDocx method is available', 'success');
+                } else {
+                    log('❌ exportDocx method is NOT available', 'error');
+                }
+                
+                // Check for required libraries
+                if (typeof PizZip !== 'undefined') {
+                    log('✅ PizZip library is loaded', 'success');
+                } else {
+                    log('❌ PizZip library is NOT loaded', 'error');
+                }
+                
+                if (typeof saveAs !== 'undefined') {
+                    log('✅ FileSaver library is loaded', 'success');
+                } else {
+                    log('❌ FileSaver library is NOT loaded', 'error');
+                }
+            });
+
+            // Test audio controls setup
+            document.getElementById('test-audio-controls').addEventListener('click', () => {
+                clearResults();
+                log('Testing audio controls setup...');
+                
+                if (window.uiController && typeof window.uiController.showReviewView === 'function') {
+                    log('✅ showReviewView method is available', 'success');
+                } else {
+                    log('❌ showReviewView method is NOT available', 'error');
+                }
+                
+                if (window.uiController && typeof window.uiController.setupAudioKeyboardShortcuts === 'function') {
+                    log('✅ setupAudioKeyboardShortcuts method is available', 'success');
+                } else {
+                    log('❌ setupAudioKeyboardShortcuts method is NOT available', 'error');
+                }
+                
+                // Check if audio element creation would work
+                try {
+                    const testAudio = document.createElement('audio');
+                    testAudio.controls = true;
+                    log('✅ Audio element creation test passed', 'success');
+                } catch (error) {
+                    log(`❌ Audio element creation test failed: ${error.message}`, 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

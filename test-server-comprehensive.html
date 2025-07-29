@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe Server Comprehensive Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        
+        input, select, textarea {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        
+        .project-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: white;
+        }
+        
+        .hidden { display: none; }
+        
+        #console {
+            background-color: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 PALAScribe Server Comprehensive Test Suite</h1>
+        <p>Testing both original Whisper functionality and new multi-user server architecture</p>
+        
+        <!-- Server Status -->
+        <div class="test-section">
+            <h2>🔍 Server Status</h2>
+            <button onclick="testServerHealth()">Test Server Health</button>
+            <button onclick="testOriginalWhisperServer()">Test Original Whisper Server (Port 8000)</button>
+            <button onclick="testNewPALAScribeServer()">Test New PALAScribe Server (Port 8765)</button>
+            <div id="serverStatus"></div>
+        </div>
+        
+        <!-- Project Management Tests -->
+        <div class="test-section">
+            <h2>📋 Project Management Tests</h2>
+            <div>
+                <input type="text" id="newProjectName" placeholder="Project Name" value="Test Project">
+                <input type="text" id="assignedTo" placeholder="Assigned To" value="Test User">
+                <button onclick="createTestProject()">Create Project</button>
+                <button onclick="loadAllProjects()">Load All Projects</button>
+                <button onclick="testProjectDeduplication()">Test Name Deduplication</button>
+            </div>
+            <div id="projectResults"></div>
+            <div id="projectsList"></div>
+        </div>
+        
+        <!-- Audio Upload & Transcription Tests -->
+        <div class="test-section">
+            <h2>🎙️ Audio Processing Tests</h2>
+            <div>
+                <input type="file" id="audioFile" accept="audio/*">
+                <select id="model">
+                    <option value="tiny">Tiny (fastest)</option>
+                    <option value="base">Base</option>
+                    <option value="small">Small</option>
+                    <option value="medium" selected>Medium (recommended)</option>
+                    <option value="large">Large (most accurate)</option>
+                </select>
+                <select id="language">
+                    <option value="English" selected>English</option>
+                    <option value="auto">Auto-detect</option>
+                </select>
+                <label>
+                    <input type="checkbox" id="previewMode"> Preview Mode (60s)
+                </label>
+                <br>
+                <button onclick="testOriginalProcessing()">Test Original Processing Endpoint</button>
+                <button onclick="testNewServerUploadAndTranscribe()">Test New Server Upload + Transcribe</button>
+            </div>
+            <div id="audioResults"></div>
+        </div>
+        
+        <!-- Database Tests -->
+        <div class="test-section">
+            <h2>🗃️ Database Integration Tests</h2>
+            <button onclick="testDatabaseOperations()">Test All DB Operations</button>
+            <button onclick="testProjectLifecycle()">Test Complete Project Lifecycle</button>
+            <div id="databaseResults"></div>
+        </div>
+        
+        <!-- UI Controller Tests -->
+        <div class="test-section">
+            <h2>🎛️ UI Controller Integration Tests</h2>
+            <button onclick="testUIControllerIntegration()">Test UI Controller Methods</button>
+            <div id="uiResults"></div>
+        </div>
+        
+        <!-- Console Output -->
+        <div class="test-section">
+            <h2>📟 Console Output</h2>
+            <button onclick="clearConsole()">Clear Console</button>
+            <div id="console"></div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const ORIGINAL_SERVER = 'http://localhost:8000';
+        const NEW_SERVER = 'http://localhost:8765';
+        
+        let testProjects = [];
+        
+        // Console logging
+        function log(message, type = 'info') {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: '#00ff00',
+                error: '#ff4444',
+                warning: '#ffaa00',
+                success: '#00ff88'
+            };
+            
+            const line = document.createElement('div');
+            line.innerHTML = `<span style="color: #888">[${timestamp}]</span> <span style="color: ${colors[type]}">${message}</span>`;
+            console.appendChild(line);
+            console.scrollTop = console.scrollHeight;
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '';
+        }
+        
+        function showResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const result = document.createElement('div');
+            result.className = `test-result ${type}`;
+            result.textContent = message;
+            container.appendChild(result);
+            
+            log(message, type);
+        }
+        
+        // Server Health Tests
+        async function testServerHealth() {
+            const container = document.getElementById('serverStatus');
+            container.innerHTML = '';
+            
+            log('Testing server health...');
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('serverStatus', `✅ New PALAScribe Server is healthy: ${data.service}`, 'success');
+                } else {
+                    showResult('serverStatus', `❌ New server health check failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('serverStatus', `❌ Cannot connect to new server: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOriginalWhisperServer() {
+            log('Testing original Whisper server...');
+            
+            try {
+                const response = await fetch(`${ORIGINAL_SERVER}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('serverStatus', `✅ Original Whisper Server is healthy`, 'success');
+                } else {
+                    showResult('serverStatus', `❌ Original server health check failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('serverStatus', `❌ Cannot connect to original server: ${error.message}`, 'error');
+                showResult('serverStatus', `ℹ️ Make sure to start original server with: python3 whisper_server.py`, 'info');
+            }
+        }
+        
+        async function testNewPALAScribeServer() {
+            log('Testing new PALAScribe server...');
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('serverStatus', `✅ New PALAScribe Server is healthy: ${data.service}`, 'success');
+                } else {
+                    showResult('serverStatus', `❌ New server health check failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('serverStatus', `❌ Cannot connect to new server: ${error.message}`, 'error');
+                showResult('serverStatus', `ℹ️ Make sure to start new server with: python3 palascribe_server.py`, 'info');
+            }
+        }
+        
+        // Project Management Tests
+        async function createTestProject() {
+            const name = document.getElementById('newProjectName').value || 'Test Project';
+            const assignedTo = document.getElementById('assignedTo').value || 'Test User';
+            
+            log(`Creating project: ${name}`);
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/projects`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        assignedTo: assignedTo
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    testProjects.push(data);
+                    showResult('projectResults', `✅ Created project: ${data.name} (ID: ${data.id})`, 'success');
+                    loadAllProjects(); // Refresh the list
+                } else {
+                    showResult('projectResults', `❌ Failed to create project: ${data.error || response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('projectResults', `❌ Error creating project: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadAllProjects() {
+            log('Loading all projects...');
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/projects`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const projects = data.projects || [];
+                    showResult('projectResults', `✅ Loaded ${projects.length} projects`, 'success');
+                    displayProjects(projects);
+                } else {
+                    showResult('projectResults', `❌ Failed to load projects: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('projectResults', `❌ Error loading projects: ${error.message}`, 'error');
+            }
+        }
+        
+        function displayProjects(projects) {
+            const container = document.getElementById('projectsList');
+            container.innerHTML = '<h3>📋 Current Projects</h3>';
+            
+            if (projects.length === 0) {
+                container.innerHTML += '<p>No projects found.</p>';
+                return;
+            }
+            
+            projects.forEach(project => {
+                const card = document.createElement('div');
+                card.className = 'project-card';
+                card.innerHTML = `
+                    <h4>${project.name}</h4>
+                    <p><strong>ID:</strong> ${project.id}</p>
+                    <p><strong>Status:</strong> <span class="status-${project.status}">${project.status}</span></p>
+                    <p><strong>Assigned to:</strong> ${project.assigned_to || 'Unassigned'}</p>
+                    <p><strong>Audio:</strong> ${project.audio_file_name || 'No audio uploaded'}</p>
+                    <p><strong>Word Count:</strong> ${project.word_count || 0}</p>
+                    <p><strong>Created:</strong> ${new Date(project.created).toLocaleString()}</p>
+                    <button onclick="deleteProject('${project.id}')">Delete</button>
+                    <button onclick="transcribeProject('${project.id}')">Transcribe</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        async function deleteProject(projectId) {
+            if (!confirm('Are you sure you want to delete this project?')) return;
+            
+            log(`Deleting project: ${projectId}`);
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showResult('projectResults', `✅ Deleted project: ${projectId}`, 'success');
+                    loadAllProjects(); // Refresh the list
+                } else {
+                    showResult('projectResults', `❌ Failed to delete project: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('projectResults', `❌ Error deleting project: ${error.message}`, 'error');
+            }
+        }
+        
+        async function transcribeProject(projectId) {
+            log(`Starting transcription for project: ${projectId}`);
+            
+            const model = document.getElementById('model').value;
+            const language = document.getElementById('language').value;
+            const preview = document.getElementById('previewMode').checked;
+            
+            try {
+                const response = await fetch(`${NEW_SERVER}/projects/${projectId}/transcribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        language: language,
+                        preview: preview,
+                        previewDuration: 60
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showResult('audioResults', `✅ Transcription completed for project ${projectId}: ${data.word_count} words`, 'success');
+                    loadAllProjects(); // Refresh to show updated status
+                } else {
+                    showResult('audioResults', `❌ Transcription failed: ${data.error || response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('audioResults', `❌ Error during transcription: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testProjectDeduplication() {
+            log('Testing project name deduplication...');
+            
+            const baseName = 'Duplicate Test';
+            
+            // Create multiple projects with the same name
+            for (let i = 0; i < 3; i++) {
+                try {
+                    const response = await fetch(`${NEW_SERVER}/projects`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            name: baseName,
+                            assignedTo: `User ${i + 1}`
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showResult('projectResults', `✅ Created: ${data.name}`, 'success');
+                    }
+                } catch (error) {
+                    showResult('projectResults', `❌ Deduplication test error: ${error.message}`, 'error');
+                }
+            }
+            
+            // Refresh project list
+            setTimeout(loadAllProjects, 500);
+        }
+        
+        // Audio Processing Tests
+        async function testOriginalProcessing() {
+            const fileInput = document.getElementById('audioFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('audioResults', '❌ Please select an audio file first', 'error');
+                return;
+            }
+            
+            log(`Testing original processing with: ${file.name}`);
+            
+            const formData = new FormData();
+            formData.append('audio', file);
+            formData.append('model', document.getElementById('model').value);
+            formData.append('language', document.getElementById('language').value);
+            formData.append('preview', document.getElementById('previewMode').checked);
+            formData.append('previewDuration', '60');
+            
+            try {
+                showResult('audioResults', '🚀 Starting original server processing...', 'info');
+                
+                const response = await fetch(`${ORIGINAL_SERVER}/process`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showResult('audioResults', `✅ Original processing completed: ${data.word_count} words in ${data.processing_time?.toFixed(1)}s`, 'success');
+                    if (data.transcription) {
+                        showResult('audioResults', `📝 Preview: ${data.transcription.substring(0, 200)}...`, 'info');
+                    }
+                } else {
+                    showResult('audioResults', `❌ Original processing failed: ${data.error || response.status}`, 'error');
+                }
+            } catch (error) {
+                showResult('audioResults', `❌ Original processing error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testNewServerUploadAndTranscribe() {
+            const fileInput = document.getElementById('audioFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('audioResults', '❌ Please select an audio file first', 'error');
+                return;
+            }
+            
+            log(`Testing new server upload and transcribe with: ${file.name}`);
+            
+            try {
+                // Step 1: Create a project
+                showResult('audioResults', '📋 Creating project for audio upload...', 'info');
+                
+                const projectResponse = await fetch(`${NEW_SERVER}/projects`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: `Audio Test - ${file.name}`,
+                        assignedTo: 'Test User'
+                    })
+                });
+                
+                const projectData = await projectResponse.json();
+                
+                if (!projectResponse.ok) {
+                    showResult('audioResults', `❌ Failed to create project: ${projectData.error}`, 'error');
+                    return;
+                }
+                
+                const projectId = projectData.id;
+                showResult('audioResults', `✅ Created project: ${projectData.name} (${projectId})`, 'success');
+                
+                // Step 2: Upload audio file
+                showResult('audioResults', '📤 Uploading audio file...', 'info');
+                
+                const formData = new FormData();
+                formData.append('audio', file);
+                
+                const uploadResponse = await fetch(`${NEW_SERVER}/projects/${projectId}/audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!uploadResponse.ok) {
+                    showResult('audioResults', `❌ Audio upload failed: ${uploadResponse.status}`, 'error');
+                    return;
+                }
+                
+                showResult('audioResults', '✅ Audio file uploaded successfully', 'success');
+                
+                // Step 3: Start transcription
+                showResult('audioResults', '🚀 Starting transcription...', 'info');
+                
+                const transcribeResponse = await fetch(`${NEW_SERVER}/projects/${projectId}/transcribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: document.getElementById('model').value,
+                        language: document.getElementById('language').value,
+                        preview: document.getElementById('previewMode').checked,
+                        previewDuration: 60
+                    })
+                });
+                
+                const transcribeData = await transcribeResponse.json();
+                
+                if (transcribeResponse.ok && transcribeData.success) {
+                    showResult('audioResults', `✅ New server processing completed: ${transcribeData.word_count} words in ${transcribeData.processing_time?.toFixed(1)}s`, 'success');
+                    if (transcribeData.transcription) {
+                        showResult('audioResults', `📝 Preview: ${transcribeData.transcription.substring(0, 200)}...`, 'info');
+                    }
+                    
+                    // Refresh projects to show updated status
+                    loadAllProjects();
+                } else {
+                    showResult('audioResults', `❌ New server transcription failed: ${transcribeData.error || transcribeResponse.status}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult('audioResults', `❌ New server processing error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Database Tests
+        async function testDatabaseOperations() {
+            log('Testing database operations...');
+            
+            const container = document.getElementById('databaseResults');
+            container.innerHTML = '';
+            
+            try {
+                // Test 1: Create projects
+                showResult('databaseResults', '🔧 Testing project creation...', 'info');
+                
+                const createResponse = await fetch(`${NEW_SERVER}/projects`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: 'DB Test Project',
+                        assignedTo: 'DB Test User'
+                    })
+                });
+                
+                const createData = await createResponse.json();
+                
+                if (createResponse.ok) {
+                    showResult('databaseResults', '✅ Project creation test passed', 'success');
+                    
+                    const projectId = createData.id;
+                    
+                    // Test 2: Retrieve project
+                    const getResponse = await fetch(`${NEW_SERVER}/projects/${projectId}`);
+                    const getData = await getResponse.json();
+                    
+                    if (getResponse.ok) {
+                        showResult('databaseResults', '✅ Project retrieval test passed', 'success');
+                        
+                        // Test 3: Update project
+                        const updateResponse = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                status: 'in_progress',
+                                transcription: 'Test transcription'
+                            })
+                        });
+                        
+                        if (updateResponse.ok) {
+                            showResult('databaseResults', '✅ Project update test passed', 'success');
+                            
+                            // Test 4: Delete project
+                            const deleteResponse = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                                method: 'DELETE'
+                            });
+                            
+                            if (deleteResponse.ok) {
+                                showResult('databaseResults', '✅ Project deletion test passed', 'success');
+                                showResult('databaseResults', '🎉 All database operations completed successfully!', 'success');
+                            } else {
+                                showResult('databaseResults', '❌ Project deletion test failed', 'error');
+                            }
+                        } else {
+                            showResult('databaseResults', '❌ Project update test failed', 'error');
+                        }
+                    } else {
+                        showResult('databaseResults', '❌ Project retrieval test failed', 'error');
+                    }
+                } else {
+                    showResult('databaseResults', '❌ Project creation test failed', 'error');
+                }
+                
+            } catch (error) {
+                showResult('databaseResults', `❌ Database test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testProjectLifecycle() {
+            log('Testing complete project lifecycle...');
+            
+            const container = document.getElementById('databaseResults');
+            container.innerHTML = '';
+            
+            showResult('databaseResults', '🔄 Starting project lifecycle test...', 'info');
+            
+            try {
+                // 1. Create project
+                const project = await createTestProjectForLifecycle();
+                if (!project) return;
+                
+                // 2. Simulate audio upload (without actual file)
+                showResult('databaseResults', '📤 Simulating audio upload...', 'info');
+                
+                // 3. Update project status
+                await updateProjectStatus(project.id, 'processing');
+                
+                // 4. Simulate transcription completion
+                await updateProjectWithTranscription(project.id);
+                
+                // 5. Verify final state
+                await verifyProjectState(project.id);
+                
+                // 6. Clean up
+                await deleteTestProject(project.id);
+                
+                showResult('databaseResults', '🎉 Project lifecycle test completed successfully!', 'success');
+                
+            } catch (error) {
+                showResult('databaseResults', `❌ Lifecycle test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function createTestProjectForLifecycle() {
+            const response = await fetch(`${NEW_SERVER}/projects`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Lifecycle Test Project',
+                    assignedTo: 'Lifecycle Tester'
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showResult('databaseResults', `✅ Created lifecycle project: ${data.id}`, 'success');
+                return data;
+            } else {
+                showResult('databaseResults', '❌ Failed to create lifecycle project', 'error');
+                return null;
+            }
+        }
+        
+        async function updateProjectStatus(projectId, status) {
+            const response = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status })
+            });
+            
+            if (response.ok) {
+                showResult('databaseResults', `✅ Updated project status to: ${status}`, 'success');
+            } else {
+                throw new Error(`Failed to update status: ${response.status}`);
+            }
+        }
+        
+        async function updateProjectWithTranscription(projectId) {
+            const response = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'completed',
+                    transcription: 'This is a test transcription with some sample content.',
+                    formatted_text: 'This is a test transcription with some sample content.',
+                    word_count: 10,
+                    processing_time: 15.5
+                })
+            });
+            
+            if (response.ok) {
+                showResult('databaseResults', '✅ Updated project with transcription data', 'success');
+            } else {
+                throw new Error(`Failed to update transcription: ${response.status}`);
+            }
+        }
+        
+        async function verifyProjectState(projectId) {
+            const response = await fetch(`${NEW_SERVER}/projects/${projectId}`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                const checks = [
+                    { test: 'Status is completed', pass: data.status === 'completed' },
+                    { test: 'Has transcription', pass: !!data.transcription },
+                    { test: 'Has word count', pass: data.word_count > 0 },
+                    { test: 'Has processing time', pass: data.processing_time > 0 }
+                ];
+                
+                checks.forEach(check => {
+                    if (check.pass) {
+                        showResult('databaseResults', `✅ Verification: ${check.test}`, 'success');
+                    } else {
+                        showResult('databaseResults', `❌ Verification failed: ${check.test}`, 'error');
+                    }
+                });
+            } else {
+                throw new Error(`Failed to verify project: ${response.status}`);
+            }
+        }
+        
+        async function deleteTestProject(projectId) {
+            const response = await fetch(`${NEW_SERVER}/projects/${projectId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                showResult('databaseResults', '✅ Cleaned up lifecycle test project', 'success');
+            } else {
+                showResult('databaseResults', '⚠️ Could not clean up lifecycle test project', 'warning');
+            }
+        }
+        
+        // UI Controller Integration Tests
+        async function testUIControllerIntegration() {
+            log('Testing UI controller integration...');
+            
+            const container = document.getElementById('uiResults');
+            container.innerHTML = '';
+            
+            // Test if UIController exists
+            if (typeof UIController !== 'undefined') {
+                showResult('uiResults', '✅ UIController is available globally', 'success');
+                
+                // Test critical methods
+                const methods = [
+                    'createProject',
+                    'deleteProject', 
+                    'downloadTranscription',
+                    'handleAudioUpload',
+                    'processAudio',
+                    'refreshProjects',
+                    'sortProjects',
+                    'enableRichTextEditor',
+                    'checkBackendStatus'
+                ];
+                
+                methods.forEach(methodName => {
+                    if (typeof UIController[methodName] === 'function') {
+                        showResult('uiResults', `✅ Method ${methodName} exists`, 'success');
+                    } else {
+                        showResult('uiResults', `❌ Method ${methodName} missing`, 'error');
+                    }
+                });
+            } else {
+                showResult('uiResults', '❌ UIController not found - check if ui-controller-fixed.js is loaded', 'error');
+            }
+        }
+        
+        // Initialize tests on page load
+        window.addEventListener('load', function() {
+            log('🧪 PALAScribe Comprehensive Test Suite initialized');
+            log('📋 Available tests: Server Health, Project Management, Audio Processing, Database, UI Controller');
+            log('🚀 Click buttons above to run specific tests');
+            
+            // Auto-test server health
+            setTimeout(testServerHealth, 1000);
+        });
+    </script>
+</body>
+</html>

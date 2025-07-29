@@ -40,11 +40,6 @@ class AudioTextConverterApp {
                 loadingIndicator.style.display = 'none';
             }
 
-            // Show welcome message if first time
-            if (this.isFirstTime()) {
-                this.showWelcomeMessage();
-            }
-
         } catch (error) {
             console.error('❌ Failed to initialize application:', error);
             console.error('Error stack:', error.stack);
@@ -105,12 +100,19 @@ class AudioTextConverterApp {
 
     // Initialize application components
     async initializeComponents() {
-        // Initialize UI Controller first
+        // Initialize UI Controller first (or use existing one)
         console.log('🎨 Initializing UI Controller...');
         
         try {
-            window.uiController = new UIController();
-            console.log('✅ UIController created successfully');
+            // Check if UIController already exists (from ui-controller-fixed.js)
+            if (window.uiController) {
+                console.log('✅ Using existing UIController instance');
+            } else if (window.UIController) {
+                window.uiController = new UIController();
+                console.log('✅ UIController created successfully');
+            } else {
+                throw new Error('UIController class not available');
+            }
         } catch (error) {
             console.error('❌ Failed to create UIController:', error);
             throw error;
@@ -246,42 +248,6 @@ class AudioTextConverterApp {
     updateSetting(key, value) {
         this.settings[key] = value;
         this.saveSettings();
-    }
-
-    // Check if this is the first time running the app
-    isFirstTime() {
-        return this.settings.firstTime === true;
-    }
-
-    // Mark first time as complete
-    markFirstTimeComplete() {
-        this.updateSetting('firstTime', false);
-    }
-
-    // Show welcome message for first-time users
-    showWelcomeMessage() {
-        const welcomeMessage = `
-            Welcome to PALAScribe! 🎵
-
-            This application helps you convert audio files to text with special
-            recognition for Pali Buddhist terms.
-
-            Key Features:
-            • Upload audio files and convert to text
-            • Automatic Pali word recognition and formatting
-            • Project management and review workflow
-            • Download generated documents
-
-            ${CONFIG.MOCK.ENABLE_MOCK_API ? 
-                'Note: Currently running in demo mode with mock transcription.' : 
-                'To get started, you\'ll need an OpenAI API key for transcription.'
-            }
-
-            Click "Create New Project" to begin!
-        `;
-
-        alert(welcomeMessage);
-        this.markFirstTimeComplete();
     }
 
     // Show critical error

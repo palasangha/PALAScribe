@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Name Deduplication Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-blue-600 mb-8">🔄 Project Name Deduplication Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Duplicate Project Name Handling</h2>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Base Project Name:</label>
+                    <input type="text" id="base-project-name" value="My Audio Project" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                
+                <div class="flex space-x-4">
+                    <button id="create-project" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">
+                        Create Project
+                    </button>
+                    <button id="create-multiple" class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600">
+                        Create 5 Projects
+                    </button>
+                    <button id="clear-all" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600">
+                        Clear All Projects
+                    </button>
+                </div>
+            </div>
+            
+            <div id="test-results" class="bg-gray-50 p-4 rounded max-h-96 overflow-y-auto">
+                <h3 class="font-semibold mb-2">Test Results:</h3>
+                <div id="results-content">Click "Create Project" to test duplicate name handling...</div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Current Projects</h2>
+            <div id="projects-list" class="space-y-2">
+                <p class="text-gray-500">No projects created yet...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load required scripts -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/project-manager.js?v=20250729g"></script>
+
+    <script>
+        let projectManager;
+        
+        function log(message, type = 'info') {
+            const resultsContent = document.getElementById('results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : type === 'warning' ? 'text-orange-600' : 'text-blue-600';
+            const timestamp = new Date().toLocaleTimeString();
+            resultsContent.innerHTML += `<div class="${color} text-sm font-mono">[${timestamp}] ${message}</div>`;
+            resultsContent.scrollTop = resultsContent.scrollHeight;
+        }
+        
+        function clearResults() {
+            document.getElementById('results-content').innerHTML = '';
+        }
+        
+        function updateProjectsList() {
+            const projectsList = document.getElementById('projects-list');
+            if (!projectManager) {
+                projectsList.innerHTML = '<p class="text-gray-500">ProjectManager not initialized...</p>';
+                return;
+            }
+            
+            const projects = projectManager.getAllProjects();
+            if (projects.length === 0) {
+                projectsList.innerHTML = '<p class="text-gray-500">No projects created yet...</p>';
+                return;
+            }
+            
+            const projectsHtml = projects.map(project => `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded border">
+                    <div>
+                        <span class="font-medium">${project.name}</span>
+                        <span class="text-sm text-gray-500 ml-2">(ID: ${project.id.substring(0, 8)}...)</span>
+                    </div>
+                    <span class="text-sm text-gray-600">${new Date(project.created).toLocaleString()}</span>
+                </div>
+            `).join('');
+            
+            projectsList.innerHTML = projectsHtml;
+        }
+        
+        function createSingleProject() {
+            const baseName = document.getElementById('base-project-name').value.trim();
+            if (!baseName) {
+                log('❌ Please enter a project name', 'error');
+                return;
+            }
+            
+            try {
+                log(`🔄 Creating project with name: "${baseName}"`, 'info');
+                const project = projectManager.createProject({
+                    name: baseName,
+                    assignedTo: 'Test User'
+                });
+                
+                log(`✅ Project created successfully: "${project.name}"`, 'success');
+                if (project.name !== baseName) {
+                    log(`📝 Name was auto-deduplicated from "${baseName}" to "${project.name}"`, 'warning');
+                }
+                
+                updateProjectsList();
+            } catch (error) {
+                log(`❌ Error creating project: ${error.message}`, 'error');
+            }
+        }
+        
+        function createMultipleProjects() {
+            const baseName = document.getElementById('base-project-name').value.trim();
+            if (!baseName) {
+                log('❌ Please enter a project name', 'error');
+                return;
+            }
+            
+            log(`🚀 Creating 5 projects with base name: "${baseName}"`, 'warning');
+            
+            for (let i = 1; i <= 5; i++) {
+                try {
+                    const project = projectManager.createProject({
+                        name: baseName,
+                        assignedTo: `Test User ${i}`
+                    });
+                    
+                    log(`✅ Project ${i} created: "${project.name}"`, 'success');
+                } catch (error) {
+                    log(`❌ Error creating project ${i}: ${error.message}`, 'error');
+                }
+            }
+            
+            updateProjectsList();
+        }
+        
+        function clearAllProjects() {
+            if (!projectManager) return;
+            
+            try {
+                projectManager.clearAllProjects();
+                log('🗑️ All projects cleared', 'warning');
+                updateProjectsList();
+            } catch (error) {
+                log(`❌ Error clearing projects: ${error.message}`, 'error');
+            }
+        }
+        
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize ProjectManager
+            try {
+                projectManager = new ProjectManager();
+                log('✅ ProjectManager initialized successfully', 'success');
+                updateProjectsList();
+            } catch (error) {
+                log(`❌ Failed to initialize ProjectManager: ${error.message}`, 'error');
+            }
+            
+            // Bind events
+            document.getElementById('create-project').addEventListener('click', createSingleProject);
+            document.getElementById('create-multiple').addEventListener('click', createMultipleProjects);
+            document.getElementById('clear-all').addEventListener('click', clearAllProjects);
+        });
+    </script>
+</body>
+</html>

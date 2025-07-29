@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COMPREHENSIVE UIController Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">COMPREHENSIVE UIController Method Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Complete Method Availability Check</h2>
+            
+            <div class="space-y-4">
+                <button id="test-all-methods" class="bg-red-500 text-white px-6 py-3 rounded hover:bg-red-600 text-lg font-bold">
+                    🔍 TEST ALL METHODS (COMPREHENSIVE)
+                </button>
+                
+                <button id="test-startup" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Test Application Startup
+                </button>
+                
+                <button id="clear-results" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                    Clear Results
+                </button>
+            </div>
+            
+            <div id="test-results" class="mt-6 p-4 bg-gray-50 rounded max-h-96 overflow-y-auto">
+                <h3 class="font-semibold mb-2">Test Results:</h3>
+                <div id="results-content">Click "TEST ALL METHODS" to run comprehensive tests...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load all required scripts -->
+    <script src="js/config.js?v=20250722b"></script>
+    <script src="js/pali-dictionary.js?v=20250721n"></script>
+    <script src="js/audio-processor.js?v=20250721l"></script>
+    <script src="js/project-manager.js?v=20250721n"></script>
+    <script src="js/ui-controller-fixed.js?v=20250729e"></script>
+    <script src="js/app.js?v=20250723b"></script>
+
+    <script>
+        function log(message, type = 'info') {
+            const resultsContent = document.getElementById('results-content');
+            const color = type === 'error' ? 'text-red-600' : type === 'success' ? 'text-green-600' : type === 'warning' ? 'text-orange-600' : 'text-blue-600';
+            resultsContent.innerHTML += `<div class="${color} text-sm font-mono">${message}</div>`;
+            
+            // Auto-scroll to bottom
+            const container = document.getElementById('test-results');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearResults() {
+            document.getElementById('results-content').innerHTML = '';
+        }
+
+        // Comprehensive list of ALL methods that should exist in UIController
+        const REQUIRED_METHODS = [
+            // Core initialization
+            'init', 'cacheElements', 'bindEvents',
+            
+            // View management
+            'showView', 'refreshProjectsList', 'refreshReviewProjectsList', 'refreshApprovedProjectsList',
+            
+            // Table functionality
+            'initTableSorting', 'sortTable', 'initRowSelection',
+            
+            // Rich text editor
+            'initializeRichTextEditor', 'executeCommand', 'updateToolbarState', 'toggleSourceMode',
+            
+            // Backend status
+            'checkAndUpdateBackendStatus', 'checkWhisperBackendAvailable', 'autoStartWhisperBackend',
+            
+            // Project management
+            'clearAllProjects', 'deleteProject', 'downloadTranscription', 'handleCreateProject',
+            
+            // Transcription editing
+            'saveDraft', 'updateWordCount', 'resetToOriginalText', 'showReviewView',
+            
+            // Export functionality
+            'exportDocx', 'downloadFinal',
+            
+            // UI state methods
+            'setRichTextContent', 'getRichTextContent', 'updateTranscriptionPreview',
+            
+            // Audio controls
+            'setupAudioKeyboardShortcuts',
+            
+            // Helper methods that are commonly called
+            'htmlToPlainText', 'showErrorMessage', 'showSuccessMessage'
+        ];
+
+        // Additional methods that might be called but are optional
+        const OPTIONAL_METHODS = [
+            'openProject', 'approveProject', 'showNewProjectModal', 'hideNewProjectModal',
+            'resetCreateForm', 'showTranscriptionModal', 'hideBackgroundProcessing',
+            'showDetailedError', 'showFileSizeInfo', 'createProjectTableRow',
+            'populateProjectsTable', 'createDocumentContent', 'saveTranscription'
+        ];
+
+        // Wait for everything to load
+        window.addEventListener('load', () => {
+            // Comprehensive method test
+            document.getElementById('test-all-methods').addEventListener('click', () => {
+                clearResults();
+                log('🔍 STARTING COMPREHENSIVE METHOD TEST', 'warning');
+                log('='.repeat(60), 'info');
+                
+                let successCount = 0;
+                let errorCount = 0;
+                
+                // Test UIController class availability
+                if (typeof UIController !== 'undefined') {
+                    log('✅ UIController class is available', 'success');
+                } else {
+                    log('❌ UIController class is NOT available', 'error');
+                    errorCount++;
+                }
+                
+                // Test UIController instance availability
+                if (window.uiController) {
+                    log('✅ uiController instance is available', 'success');
+                    
+                    // Test all required methods
+                    log('', 'info');
+                    log('📋 TESTING REQUIRED METHODS:', 'warning');
+                    log('-'.repeat(40), 'info');
+                    
+                    REQUIRED_METHODS.forEach(methodName => {
+                        if (typeof window.uiController[methodName] === 'function') {
+                            log(`✅ ${methodName}()`, 'success');
+                            successCount++;
+                        } else {
+                            log(`❌ ${methodName}() - MISSING!`, 'error');
+                            errorCount++;
+                        }
+                    });
+                    
+                    // Test optional methods
+                    log('', 'info');
+                    log('📋 TESTING OPTIONAL METHODS:', 'warning');
+                    log('-'.repeat(40), 'info');
+                    
+                    OPTIONAL_METHODS.forEach(methodName => {
+                        if (typeof window.uiController[methodName] === 'function') {
+                            log(`✅ ${methodName}()`, 'success');
+                        } else {
+                            log(`⚠️ ${methodName}() - optional, not found`, 'warning');
+                        }
+                    });
+                    
+                } else {
+                    log('❌ uiController instance is NOT available', 'error');
+                    errorCount++;
+                }
+                
+                // Test supporting objects
+                log('', 'info');
+                log('📋 TESTING SUPPORTING OBJECTS:', 'warning');
+                log('-'.repeat(40), 'info');
+                
+                if (typeof projectManager !== 'undefined') {
+                    log('✅ projectManager is available', 'success');
+                } else {
+                    log('❌ projectManager is NOT available', 'error');
+                    errorCount++;
+                }
+                
+                if (typeof CONFIG !== 'undefined') {
+                    log('✅ CONFIG is available', 'success');
+                } else {
+                    log('❌ CONFIG is NOT available', 'error');
+                    errorCount++;
+                }
+                
+                if (typeof UTILS !== 'undefined') {
+                    log('✅ UTILS is available', 'success');
+                } else {
+                    log('❌ UTILS is NOT available', 'error');
+                    errorCount++;
+                }
+                
+                // Summary
+                log('', 'info');
+                log('='.repeat(60), 'info');
+                log(`📊 TEST SUMMARY:`, 'warning');
+                log(`✅ Success: ${successCount}`, 'success');
+                log(`❌ Errors: ${errorCount}`, 'error');
+                
+                if (errorCount === 0) {
+                    log('🎉 ALL TESTS PASSED! UIController is complete.', 'success');
+                } else {
+                    log(`🚨 ${errorCount} ERRORS FOUND! Fix these before declaring success.`, 'error');
+                }
+            });
+
+            // Test application startup
+            document.getElementById('test-startup').addEventListener('click', () => {
+                clearResults();
+                log('🚀 Testing application startup sequence...', 'warning');
+                
+                try {
+                    // Simulate what happens during startup
+                    if (window.uiController) {
+                        log('✅ UIController instance exists', 'success');
+                        
+                        // Test key properties
+                        if (window.uiController.currentView) {
+                            log(`✅ currentView: ${window.uiController.currentView}`, 'success');
+                        } else {
+                            log('❌ currentView not set', 'error');
+                        }
+                        
+                        if (window.uiController.elements) {
+                            log(`✅ elements cached (${Object.keys(window.uiController.elements).length} elements)`, 'success');
+                        } else {
+                            log('❌ elements not cached', 'error');
+                        }
+                        
+                        log('🎉 Startup test completed successfully!', 'success');
+                    } else {
+                        log('❌ UIController instance not found', 'error');
+                    }
+                } catch (error) {
+                    log(`❌ Startup test failed: ${error.message}`, 'error');
+                }
+            });
+
+            // Clear results button
+            document.getElementById('clear-results').addEventListener('click', clearResults);
+        });
+    </script>
+</body>
+</html>

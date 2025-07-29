@@ -3,7 +3,7 @@
 # This script checks if the server is running and starts it if needed
 
 PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
-SERVER_PORT=8000
+SERVER_PORT=8765
 VENV_PATH="$PROJECT_DIR/whisper-env"
 SERVER_SCRIPT="$PROJECT_DIR/whisper_server.py"
 PID_FILE="$PROJECT_DIR/.whisper_server.pid"
