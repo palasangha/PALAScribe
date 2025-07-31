@@ -309,8 +309,8 @@ class UIController {
         }
 
         if (this.elements.btnSaveDraft) {
-            this.elements.btnSaveDraft.addEventListener('click', () => {
-                this.saveDraft();
+            this.elements.btnSaveDraft.addEventListener('click', async () => {
+                await this.saveDraft();
             });
         }
 
@@ -1461,6 +1461,12 @@ class UIController {
         }
 
         // Store current project for review
+        console.log('📋 Storing currentProject in showReviewView:', {
+            projectId: project.id,
+            projectName: project.name,
+            hasName: !!project.name,
+            projectKeys: Object.keys(project)
+        });
         this.currentProject = project;
 
         // Store original text for reset functionality
@@ -2281,6 +2287,13 @@ class UIController {
             projectId: this.currentProject?.id
         });
         
+        // Debug: Log all properties of currentProject
+        if (this.currentProject) {
+            console.log('🔍 Complete currentProject object:', this.currentProject);
+            console.log('🔍 currentProject keys:', Object.keys(this.currentProject));
+            console.log('🔍 Project name value:', JSON.stringify(this.currentProject.name));
+        }
+        
         if (!this.currentProject || !this.elements.transcriptionEditor) {
             console.error('❌ Missing currentProject or transcriptionEditor:', {
                 currentProject: !!this.currentProject,
@@ -2288,6 +2301,22 @@ class UIController {
             });
             this.showErrorMessage('No project selected or editor not found');
             return;
+        }
+        
+        // Try to refresh the project data if name is missing
+        if (!this.currentProject.name && this.currentProject.id) {
+            console.log('🔄 Project name missing, trying to refresh project data...');
+            try {
+                const refreshedProject = await this.projectManager.getProject(this.currentProject.id, true);
+                if (refreshedProject && refreshedProject.name) {
+                    console.log('✅ Refreshed project data:', refreshedProject.name);
+                    this.currentProject = refreshedProject;
+                } else {
+                    console.error('❌ Failed to refresh project data or name still missing');
+                }
+            } catch (error) {
+                console.error('❌ Error refreshing project data:', error);
+            }
         }
         
         if (!this.currentProject.name) {
@@ -2514,7 +2543,7 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
     }
     
     // Save draft functionality
-    saveDraft() {
+    async saveDraft() {
         console.log('💾 saveDraft() called');
         
         if (!this.currentProject || !this.elements.transcriptionEditor) {
@@ -2548,10 +2577,10 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
                 lastModified: new Date().toISOString()
             };
             
-            this.projectManager.updateProject(this.currentProject.id, updateData);
+            await this.projectManager.updateProject(this.currentProject.id, updateData);
             
             // Update current project reference
-            this.currentProject = this.projectManager.getProject(this.currentProject.id);
+            this.currentProject = await this.projectManager.getProject(this.currentProject.id);
             
             // Show success message
             this.showSuccessMessage('Draft saved successfully!');
