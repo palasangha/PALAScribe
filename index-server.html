@@ -65,8 +65,55 @@
                     <button id="confirm-cancel-processing" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:w-auto sm:text-sm">
                         Yes, Cancel
                     </button>
-                    <button id="cancel-cancel-processing" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm">
-                        Continue Processing
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transcription Progress Modal -->
+    <div id="transcription-progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-w-md">
+            <div class="text-center">
+                <!-- Modal Header -->
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                    </svg>
+                </div>
+                
+                <!-- Title -->
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Transcribing Audio</h3>
+                
+                <!-- Status Message -->
+                <p id="transcription-progress-message" class="text-sm text-gray-600 mb-4">Processing your audio file...</p>
+                
+                <!-- Progress Bar -->
+                <div class="w-full bg-gray-200 rounded-full h-2 mb-4">
+                    <div id="transcription-progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                
+                <!-- Time Information -->
+                <div class="flex justify-between text-sm text-gray-500 mb-4">
+                    <div>
+                        <span class="font-medium">Elapsed:</span>
+                        <span id="transcription-elapsed-time">00:00</span>
+                    </div>
+                    <div>
+                        <span class="font-medium">Remaining:</span>
+                        <span id="transcription-remaining-time">--:--</span>
+                    </div>
+                </div>
+                
+                <!-- File Info -->
+                <div id="transcription-file-info" class="text-xs text-gray-400 mb-4"></div>
+                
+                <!-- Action Buttons -->
+                <div class="flex space-x-3">
+                    <button id="minimize-transcription-modal" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
+                        Minimize
+                    </button>
+                    <button id="cancel-transcription-processing" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm">
+                        Cancel
                     </button>
                 </div>
             </div>

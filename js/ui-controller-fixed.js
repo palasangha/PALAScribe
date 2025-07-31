@@ -15,6 +15,11 @@ class UIController {
             this.commandUpdateTimeout = null; // Timeout for debounced updates
             this.isSourceMode = false; // Rich text editor mode flag
             
+            // Transcription modal timer properties
+            this.transcriptionTimer = null;
+            this.transcriptionStartTime = null;
+            this.transcriptionProgress = 0;
+            
             console.log('🔧 UIController properties initialized, calling init...');
             this.init();
             console.log('✅ UIController constructor completed successfully');
@@ -161,6 +166,16 @@ class UIController {
             cancelProcessingModal: document.getElementById('cancel-processing-modal'),
             confirmCancelProcessing: document.getElementById('confirm-cancel-processing'),
             cancelCancelProcessing: document.getElementById('cancel-cancel-processing'),
+
+            // Transcription progress modal
+            transcriptionProgressModal: document.getElementById('transcription-progress-modal'),
+            transcriptionProgressMessage: document.getElementById('transcription-progress-message'),
+            transcriptionProgressBar: document.getElementById('transcription-progress-bar'),
+            transcriptionElapsedTime: document.getElementById('transcription-elapsed-time'),
+            transcriptionRemainingTime: document.getElementById('transcription-remaining-time'),
+            transcriptionFileInfo: document.getElementById('transcription-file-info'),
+            minimizeTranscriptionModal: document.getElementById('minimize-transcription-modal'),
+            cancelTranscriptionProcessing: document.getElementById('cancel-transcription-processing'),
 
             // Views
             viewDashboard: document.getElementById('view-dashboard'),
@@ -485,6 +500,26 @@ class UIController {
                     // Show file size warning for large files
                     this.showFileSizeInfo(file);
                 }
+            });
+        }
+
+        // Transcription progress modal events
+        if (this.elements.minimizeTranscriptionModal) {
+            this.elements.minimizeTranscriptionModal.addEventListener('click', () => {
+                this.minimizeTranscriptionModal();
+            });
+        }
+
+        if (this.elements.cancelTranscriptionProcessing) {
+            this.elements.cancelTranscriptionProcessing.addEventListener('click', () => {
+                this.showCancelProcessingModal();
+            });
+        }
+
+        // Status bar click to restore modal
+        if (this.elements.processingStatusBar) {
+            this.elements.processingStatusBar.addEventListener('click', () => {
+                this.restoreTranscriptionModal();
             });
         }
     }
@@ -843,24 +878,167 @@ class UIController {
     // Background processing UI methods
     showBackgroundProcessing(message) {
         console.log('📝 Starting background processing: ' + message);
-        if (this.elements.processingStatusBar) {
-            this.elements.processingStatusBar.classList.remove('hidden');
-        }
-        this.updateBackgroundProcessingMessage(message);
+        this.showTranscriptionProgressModal(message);
     }
 
     hideBackgroundProcessing() {
         console.log('📝 Hiding background processing UI');
-        if (this.elements.processingStatusBar) {
-            this.elements.processingStatusBar.classList.add('hidden');
-        }
+        this.hideTranscriptionProgressModal();
     }
 
     updateBackgroundProcessingMessage(message) {
+        this.updateTranscriptionProgress(message);
+    }
+
+    // New transcription modal methods
+    showTranscriptionProgressModal(message = "Processing your audio file...") {
+        console.log('🎙️ Showing transcription progress modal');
+        
+        // Initialize the modal
+        this.transcriptionStartTime = Date.now();
+        this.transcriptionProgress = 0;
+        
+        // Reset modal content
+        if (this.elements.transcriptionProgressMessage) {
+            this.elements.transcriptionProgressMessage.textContent = message;
+        }
+        if (this.elements.transcriptionProgressBar) {
+            this.elements.transcriptionProgressBar.style.width = '0%';
+        }
+        if (this.elements.transcriptionElapsedTime) {
+            this.elements.transcriptionElapsedTime.textContent = '00:00';
+        }
+        if (this.elements.transcriptionRemainingTime) {
+            this.elements.transcriptionRemainingTime.textContent = '--:--';
+        }
+        
+        // Show the modal
+        if (this.elements.transcriptionProgressModal) {
+            this.elements.transcriptionProgressModal.classList.remove('hidden');
+        }
+        
+        // Start the timer update
+        this.startTranscriptionTimer();
+    }
+
+    hideTranscriptionProgressModal() {
+        console.log('🎙️ Hiding transcription progress modal');
+        
+        if (this.elements.transcriptionProgressModal) {
+            this.elements.transcriptionProgressModal.classList.add('hidden');
+        }
+        
+        // Stop the timer
+        this.stopTranscriptionTimer();
+    }
+
+    minimizeTranscriptionModal() {
+        console.log('🎙️ Minimizing transcription modal to status bar');
+        
+        // Hide the modal
+        this.hideTranscriptionProgressModal();
+        
+        // Show the old status bar as minimized view
+        if (this.elements.processingStatusBar) {
+            this.elements.processingStatusBar.classList.remove('hidden');
+            if (this.elements.processingStatusMessage) {
+                this.elements.processingStatusMessage.textContent = 'Transcribing... (click to restore)';
+            }
+        }
+    }
+
+    restoreTranscriptionModal() {
+        console.log('🎙️ Restoring transcription modal from status bar');
+        
+        // Hide the status bar
+        if (this.elements.processingStatusBar) {
+            this.elements.processingStatusBar.classList.add('hidden');
+        }
+        
+        // Show the modal
+        if (this.elements.transcriptionProgressModal) {
+            this.elements.transcriptionProgressModal.classList.remove('hidden');
+        }
+        
+        // Resume the timer if not already running
+        if (!this.transcriptionTimer) {
+            this.startTranscriptionTimer();
+        }
+    }
+
+    updateTranscriptionProgress(message, progress = null, fileInfo = null) {
+        // Update message
+        if (this.elements.transcriptionProgressMessage) {
+            this.elements.transcriptionProgressMessage.textContent = message;
+        }
+        
+        // Update progress bar if progress is provided
+        if (progress !== null && this.elements.transcriptionProgressBar) {
+            this.transcriptionProgress = progress;
+            this.elements.transcriptionProgressBar.style.width = `${progress}%`;
+        }
+        
+        // Update file info if provided
+        if (fileInfo && this.elements.transcriptionFileInfo) {
+            this.elements.transcriptionFileInfo.textContent = fileInfo;
+        }
+        
+        // Update status bar message for minimized view
         if (this.elements.processingStatusMessage) {
             this.elements.processingStatusMessage.textContent = message;
         }
-        console.log('📝 Background processing: ' + message);
+    }
+
+    startTranscriptionTimer() {
+        // Clear any existing timer
+        this.stopTranscriptionTimer();
+        
+        this.transcriptionTimer = setInterval(() => {
+            this.updateTranscriptionTimer();
+        }, 1000);
+    }
+
+    stopTranscriptionTimer() {
+        if (this.transcriptionTimer) {
+            clearInterval(this.transcriptionTimer);
+            this.transcriptionTimer = null;
+        }
+    }
+
+    updateTranscriptionTimer() {
+        if (!this.transcriptionStartTime) return;
+        
+        const elapsedMs = Date.now() - this.transcriptionStartTime;
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        
+        // Format elapsed time
+        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+        const elapsedSecondsRemainder = elapsedSeconds % 60;
+        const elapsedTimeStr = `${elapsedMinutes.toString().padStart(2, '0')}:${elapsedSecondsRemainder.toString().padStart(2, '0')}`;
+        
+        if (this.elements.transcriptionElapsedTime) {
+            this.elements.transcriptionElapsedTime.textContent = elapsedTimeStr;
+        }
+        
+        // Calculate remaining time based on progress
+        let remainingTimeStr = '--:--';
+        if (this.transcriptionProgress > 5) { // Only estimate after some progress
+            const estimatedTotalMs = (elapsedMs / this.transcriptionProgress) * 100;
+            const remainingMs = estimatedTotalMs - elapsedMs;
+            const remainingSeconds = Math.floor(remainingMs / 1000);
+            
+            if (remainingSeconds > 0) {
+                const remainingMinutes = Math.floor(remainingSeconds / 60);
+                const remainingSecondsRemainder = remainingSeconds % 60;
+                remainingTimeStr = `${remainingMinutes.toString().padStart(2, '0')}:${remainingSecondsRemainder.toString().padStart(2, '0')}`;
+            } else {
+                remainingTimeStr = '00:00';
+            }
+        }
+        
+        if (this.elements.transcriptionRemainingTime) {
+            this.elements.transcriptionRemainingTime.textContent = remainingTimeStr;
+        }
     }
 
     // Notification system
