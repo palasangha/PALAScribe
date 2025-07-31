@@ -455,13 +455,45 @@ class DatabaseManager:
         
         project = dict(zip(columns, row))
         
-        # Add audio URL if file exists
-        if project['audio_file_path']:
-            audio_path = Path(project['audio_file_path'])
-            if audio_path.exists():
-                project['audioUrl'] = f"/audio/{audio_path.name}"
+        # Convert snake_case field names to camelCase for client compatibility
+        field_mapping = {
+            'assigned_to': 'assignedTo',
+            'start_date': 'startDate',
+            'end_date': 'endDate',
+            'audio_file_name': 'audioFileName',
+            'audio_file_path': 'audioFilePath',
+            'formatted_text': 'formattedText',
+            'edited_text': 'editedText',
+            'rich_content': 'richContent',
+            'word_count': 'wordCount',
+            'processing_time': 'processingTime',
+            'is_preview': 'isPreview',
+            'error_message': 'errorMessage'
+        }
         
-        return project
+        # Create new project dict with camelCase field names
+        converted_project = {}
+        for key, value in project.items():
+            new_key = field_mapping.get(key, key)
+            converted_project[new_key] = value
+        
+        # Add audio URL if file exists
+        print(f"🔍 _row_to_project: audioFilePath = {converted_project.get('audioFilePath')}")
+        if converted_project.get('audioFilePath'):
+            audio_path = Path(converted_project['audioFilePath'])
+            print(f"🔍 _row_to_project: audio_path = {audio_path}")
+            print(f"🔍 _row_to_project: audio_path.exists() = {audio_path.exists()}")
+            if audio_path.exists():
+                audio_url = f"/audio/{audio_path.name}"
+                converted_project['audioUrl'] = audio_url
+                print(f"✅ _row_to_project: Generated audioUrl = {audio_url}")
+            else:
+                print(f"❌ _row_to_project: Audio file does not exist at {audio_path}")
+        else:
+            print(f"❌ _row_to_project: No audioFilePath found in project")
+        
+        print(f"📋 _row_to_project: Final project keys = {list(converted_project.keys())}")
+        return converted_project
 
 class PALAScribeHandler(BaseHTTPRequestHandler):
     """HTTP request handler for PALAScribe API"""
@@ -651,12 +683,17 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     def handle_get_project(self, project_id):
         """Get specific project"""
         try:
+            print(f"🔍 Getting project: {project_id}")
             project = self.db_manager.get_project(project_id)
             if project:
+                print(f"✅ Found project: {project.get('name', 'Unnamed')}")
+                print(f"📋 Project audio data: audioFilePath={project.get('audioFilePath')}, audioUrl={project.get('audioUrl')}")
                 self.send_json_response(project)
             else:
+                print(f"❌ Project {project_id} not found")
                 self.send_error_response(404, "Project not found")
         except Exception as e:
+            print(f"❌ Error getting project {project_id}: {e}")
             self.send_error_response(500, str(e))
     
     def handle_create_project(self):
@@ -686,7 +723,32 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
             
-            self.db_manager.update_project(project_id, data)
+            # Convert camelCase fields to snake_case for database
+            field_mapping = {
+                'assignedTo': 'assigned_to',
+                'startDate': 'start_date',
+                'endDate': 'end_date',
+                'audioFileName': 'audio_file_name',
+                'audioFilePath': 'audio_file_path',
+                'formattedText': 'formatted_text',
+                'editedText': 'edited_text',
+                'richContent': 'rich_content',
+                'wordCount': 'word_count',
+                'processingTime': 'processing_time',
+                'isPreview': 'is_preview',
+                'errorMessage': 'error_message'
+            }
+            
+            # Convert field names
+            converted_data = {}
+            for key, value in data.items():
+                # Use snake_case if conversion exists, otherwise keep original
+                db_key = field_mapping.get(key, key)
+                converted_data[db_key] = value
+            
+            print(f"🔄 Updating project {project_id} with fields: {list(converted_data.keys())}")
+            
+            self.db_manager.update_project(project_id, converted_data)
             
             # Return updated project
             project = self.db_manager.get_project(project_id)
@@ -696,6 +758,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 self.send_error_response(404, "Project not found")
                 
         except Exception as e:
+            print(f"❌ Error updating project {project_id}: {e}")
             self.send_error_response(500, str(e))
     
     def handle_delete_project(self, project_id):
@@ -731,19 +794,32 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             form_data = self.rfile.read(content_length)
             
-            # Extract audio file (simplified parsing)
-            # In production, use a proper multipart parser
-            boundary = content_type.split('boundary=')[-1].encode()
+            print(f"📥 Received multipart form data: {len(form_data)} bytes")
+            print(f"📋 Content-Type: {content_type}")
+            
+            # Extract audio file (improved parsing)
+            boundary = content_type.split('boundary=')[-1]
+            if boundary.startswith('"') and boundary.endswith('"'):
+                boundary = boundary[1:-1]  # Remove quotes if present
+            boundary = boundary.encode()
+            
+            print(f"🔍 Using boundary: {boundary}")
+            
             parts = form_data.split(b'--' + boundary)
+            print(f"📦 Found {len(parts)} parts in multipart data")
             
             audio_data = None
             filename = None
             
-            for part in parts:
+            for i, part in enumerate(parts):
+                print(f"🔍 Processing part {i}: {len(part)} bytes")
                 if b'Content-Disposition: form-data; name="audio"' in part:
+                    print(f"✅ Found audio part in part {i}")
+                    
                     # Extract filename
                     if b'filename="' in part:
                         filename = part.split(b'filename="')[1].split(b'"')[0].decode('utf-8')
+                        print(f"📁 Extracted filename: {filename}")
                     
                     # Extract file data (after double CRLF)
                     if b'\r\n\r\n' in part:
@@ -751,21 +827,27 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                         # Remove trailing boundary data
                         if b'\r\n--' in audio_data:
                             audio_data = audio_data.split(b'\r\n--')[0]
+                        print(f"📄 Extracted audio data: {len(audio_data)} bytes")
                     break
             
             if not audio_data or not filename:
+                print(f"❌ Multipart parsing failed - audio_data: {bool(audio_data)}, filename: {filename}")
                 self.send_error_response(400, "No audio file found")
                 return
             
             # Save audio file
+            print(f"💾 Attempting to save audio file: {filename} ({len(audio_data)} bytes)")
             mime_type = "audio/mpeg"  # Default, could be detected
             file_path = self.db_manager.save_audio_file(project_id, audio_data, filename, mime_type)
+            print(f"✅ Audio file saved to: {file_path}")
             
             # Update project status
+            print(f"📝 Updating project {project_id} status to 'processing'")
             self.db_manager.update_project(project_id, {
                 'status': 'processing'
             })
             
+            print(f"📤 Sending success response for audio upload")
             self.send_json_response({
                 "message": "Audio file uploaded successfully",
                 "file_path": file_path,
@@ -779,13 +861,26 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     def handle_transcribe_project(self, project_id):
         """Start transcription for an existing project"""
         try:
+            print(f"🎙️ Starting transcription for project {project_id}")
+            
             # Get project
             project = self.db_manager.get_project(project_id)
             if not project:
+                print(f"❌ Project {project_id} not found in database")
                 self.send_error_response(404, "Project not found")
                 return
             
-            if not project.get('audio_file_path'):
+            print(f"📋 Retrieved project data: {project}")
+            print(f"🔍 Audio file path in project (snake_case): {project.get('audio_file_path')}")
+            print(f"🔍 Audio file path in project (camelCase): {project.get('audioFilePath')}")
+            print(f"🔍 Audio file name in project: {project.get('audio_file_name')} or {project.get('audioFileName')}")
+            
+            # Check for audio file path in both naming conventions
+            audio_file_path = project.get('audio_file_path') or project.get('audioFilePath')
+            
+            if not audio_file_path:
+                print(f"❌ No audio file path found for project {project_id}")
+                print(f"📋 Full project keys: {list(project.keys())}")
                 self.send_error_response(400, "No audio file uploaded for this project")
                 return
             
@@ -812,7 +907,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.db_manager.update_project(project_id, {'status': 'processing'})
             
             # Process the audio file
-            audio_file_path = project['audio_file_path']
+            print(f"🎵 Using audio file path: {audio_file_path}")
             result = self.execute_whisper_command(
                 audio_file_path,
                 model=model,
@@ -828,12 +923,12 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     'formatted_text': result.get('formatted_text', ''),
                     'word_count': result.get('word_count', 0),
                     'processing_time': result.get('processing_time', 0),
-                    'status': 'completed'
+                    'status': 'Needs_Review'  # Set to ready for review status
                 })
                 print(f"✅ Transcription completed for project {project_id}")
             else:
                 self.db_manager.update_project(project_id, {
-                    'status': 'failed',
+                    'status': 'Error',  # Use consistent error status
                     'error_message': result.get('error', 'Unknown error')
                 })
                 print(f"❌ Transcription failed for project {project_id}")
@@ -1065,7 +1160,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 command, 
                 capture_output=True, 
                 text=True, 
-                check=True,
+                check=False,  # Don't raise exception, we'll handle errors manually
                 cwd=project_dir,
                 timeout=timeout_seconds
             )
@@ -1074,18 +1169,155 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             processing_time = end_time - start_time
             
             print(f"✅ Whisper processing completed in {processing_time:.1f} seconds")
+            print(f"🔍 Command return code: {result.returncode}")
+            
+            # Enhanced debugging - capture and display stdout/stderr
+            if result.stdout:
+                print(f"📤 Whisper stdout: {result.stdout[:500]}...")
+            if result.stderr:
+                print(f"📤 Whisper stderr: {result.stderr[:500]}...")
             
             # Find and read the generated text file
             audio_name = Path(processed_audio_path).stem
             text_file = f"{audio_name}.txt"
             
+            # Enhanced debugging - check current working directory and files
+            print(f"🔍 Current working directory: {os.getcwd()}")
+            print(f"🔍 Audio file name stem: {audio_name}")
+            print(f"🔍 Files in current directory:")
+            try:
+                current_files = os.listdir('.')
+                relevant_files = [f for f in current_files if audio_name.lower() in f.lower() or f.endswith(('.txt', '.srt', '.vtt'))]
+                for file in relevant_files[:10]:  # Limit output
+                    file_path = os.path.join('.', file)
+                    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                    print(f"   📄 {file} ({file_size} bytes)")
+                    
+                # Also check if there are any files that contain the base temp name
+                base_temp_name = Path(processed_audio_path).name.replace('.mp3', '').replace('.wav', '').replace('.m4a', '')
+                print(f"🔍 Base temp name: {base_temp_name}")
+                temp_related = [f for f in current_files if base_temp_name in f and f.endswith(('.txt', '.srt', '.vtt'))]
+                if temp_related:
+                    print(f"🔍 Temp-name related files: {temp_related}")
+                    for file in temp_related:
+                        file_path = os.path.join('.', file)
+                        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                        print(f"   📄 {file} ({file_size} bytes)")
+                        
+            except Exception as e:
+                print(f"❌ Error listing directory: {e}")
+            
+            print(f"🔍 Looking for transcription file: {text_file}")
+            print(f"🔍 Expected file exists: {os.path.exists(text_file)}")
+            
             transcription = ""
-            word_count = 0;
-            if os.path.exists(text_file):
-                with open(text_file, 'r', encoding='utf-8') as f:
-                    transcription = f.read();
-                    word_count = len(transcription.split());
+            word_count = 0
+            
+            # Enhanced file search - try multiple possible filenames
+            possible_files = [
+                f"{audio_name}.txt",
+                f"{Path(audio_file_path).stem}.txt",  # Original audio name
+                f"{Path(processed_audio_path).name}.txt",  # Full processed name with extension
+            ]
+            
+            # Also check for SRT files as fallback
+            srt_files = [
+                f"{audio_name}.srt",
+                f"{Path(audio_file_path).stem}.srt",
+                f"{Path(processed_audio_path).name}.srt",
+            ]
+            
+            # Also search for any .txt files created recently
+            try:
+                txt_files = [f for f in os.listdir('.') if f.endswith('.txt')]
+                # Filter out project documentation files
+                project_files = ['SEAMLESS_WORKFLOW.txt', 'FILE_SIZE_FIX.txt', 'INTEGRATION_SUCCESS.txt', 
+                               'PROGRESS_TRACKING_SUCCESS.txt', 'SUCCESS.txt', 'TECHNICAL_SPECS.txt',
+                               'ARCHITECTURE_CONSOLIDATION.txt', 'DEMO_DOCUMENTATION.txt']
+                whisper_files = [f for f in txt_files if f not in project_files]
                 
+                if whisper_files:
+                    print(f"🔍 Found potential Whisper .txt files: {whisper_files}")
+                    # Add recent .txt files to possible files
+                    for txt_file in whisper_files:
+                        if txt_file not in possible_files:
+                            possible_files.append(txt_file)
+                            
+                if txt_files:
+                    print(f"🔍 All .txt files in directory: {txt_files}")
+            except Exception as e:
+                print(f"❌ Error searching for .txt files: {e}")
+            
+            print(f"🔍 Checking possible transcription files: {possible_files}")
+            
+            for potential_file in possible_files:
+                print(f"🔍 Checking file: {potential_file}")
+                if os.path.exists(potential_file):
+                    try:
+                        file_size = os.path.getsize(potential_file)
+                        print(f"✅ Found file: {potential_file} ({file_size} bytes)")
+                        
+                        with open(potential_file, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                            
+                        print(f"📄 File content length: {len(file_content)} characters")
+                        print(f"📄 File content preview: {file_content[:200]}...")
+                        
+                        if file_content.strip():
+                            transcription = file_content
+                            word_count = len(transcription.split())
+                            text_file = potential_file  # Update for cleanup
+                            print(f"✅ Using transcription from: {potential_file}")
+                            break
+                        else:
+                            print(f"⚠️ File {potential_file} is empty")
+                            
+                    except Exception as e:
+                        print(f"❌ Error reading file {potential_file}: {e}")
+                else:
+                    print(f"❌ File not found: {potential_file}")
+            
+            # If no TXT file found, try SRT files as fallback
+            if not transcription.strip():
+                print(f"🔍 No TXT files found, trying SRT files as fallback: {srt_files}")
+                for srt_file in srt_files:
+                    print(f"🔍 Checking SRT file: {srt_file}")
+                    if os.path.exists(srt_file):
+                        try:
+                            file_size = os.path.getsize(srt_file)
+                            print(f"✅ Found SRT file: {srt_file} ({file_size} bytes)")
+                            
+                            with open(srt_file, 'r', encoding='utf-8') as f:
+                                srt_content = f.read()
+                                
+                            print(f"📄 SRT content length: {len(srt_content)} characters")
+                            print(f"📄 SRT content preview: {srt_content[:200]}...")
+                            
+                            if srt_content.strip():
+                                # Convert SRT to plain text by extracting only the text lines
+                                lines = srt_content.strip().split('\n')
+                                text_lines = []
+                                for line in lines:
+                                    line = line.strip()
+                                    # Skip sequence numbers, timestamps, and empty lines
+                                    if line and not line.isdigit() and '-->' not in line:
+                                        text_lines.append(line)
+                                
+                                transcription = ' '.join(text_lines)
+                                word_count = len(transcription.split())
+                                text_file = srt_file  # Update for cleanup
+                                print(f"✅ Using transcription from SRT file: {srt_file}")
+                                print(f"📝 Converted SRT to text: {len(transcription)} characters")
+                                break
+                            else:
+                                print(f"⚠️ SRT file {srt_file} is empty")
+                                
+                        except Exception as e:
+                            print(f"❌ Error reading SRT file {srt_file}: {e}")
+                    else:
+                        print(f"❌ SRT file not found: {srt_file}")
+            
+            if transcription.strip():
                 print(f"📝 Generated transcription: {word_count} words")
                 
                 # Apply Pali corrections
@@ -1099,14 +1331,20 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 
                 # Clean up text file
                 try:
-                    os.unlink(text_file)
-                    print(f"🗑️ Cleaned up text file: {text_file}")
-                except:
-                    pass
+                    if os.path.exists(text_file):
+                        os.unlink(text_file)
+                        print(f"🗑️ Cleaned up text file: {text_file}")
+                except Exception as e:
+                    print(f"❌ Error cleaning up {text_file}: {e}")
+            
             # If transcription is empty, treat as error
             if not transcription.strip():
                 error_msg = "No transcription generated by Whisper."
                 print(f"❌ {error_msg}")
+                if result.returncode != 0:
+                    print(f"❌ Whisper command failed with return code: {result.returncode}")
+                    if result.stderr:
+                        print(f"❌ Error details: {result.stderr}")
                 return {"success": False, "error": error_msg}
             
             # Clean up trimmed audio if it was created

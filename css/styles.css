@@ -1,6 +1,19 @@
 /* Custom styles for PALAScribe */
 
-/* Notification System */
+/* Notification Container - FORCE TOP RIGHT POSITIONING */
+#notification-container {
+    position: fixed !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    z-index: 9999 !important;
+    pointer-events: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+    max-width: 28rem !important;
+}
+
+/* Notification System - TOP RIGHT POSITIONING */
 .notification {
     max-width: 24rem;
     width: 100%;
@@ -13,10 +26,11 @@
     transform: translateX(0);
     transition: all 0.3s ease;
     opacity: 1;
+    margin-left: auto; /* Ensure right alignment */
 }
 
 .notification.slide-out {
-    transform: translateX(100%);
+    transform: translateX(100%); /* Slide out to the right */
     opacity: 0;
 }
 
@@ -410,41 +424,72 @@
     }
 }
 
-/* Rich Text Editor Styles - Compact Version */
+/* Rich Text Editor Styles - Compact Version - DARK THEME FOR VISIBILITY */
 .toolbar-btn-sm {
-    padding: 4px 6px;
-    margin: 0.5px;
-    border: 1px solid transparent;
-    border-radius: 3px;
-    background: transparent;
-    color: #374151;
+    padding: 6px 8px !important;
+    margin: 1px !important;
+    border: 2px solid #4b5563 !important;
+    border-radius: 4px !important;
+    background: #374151 !important; /* Dark gray background */
+    color: #f9fafb !important; /* Light text for contrast */
     cursor: pointer;
     transition: all 0.15s;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     font-size: 12px;
+    font-weight: 600 !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important; /* Stronger shadow for dark theme */
 }
 
 .toolbar-btn-sm:hover {
-    background-color: #e5e7eb;
-    border-color: #d1d5db;
+    background-color: #4b5563 !important; /* Lighter dark gray on hover */
+    border-color: #6b7280 !important;
+    color: #ffffff !important; /* Pure white text on hover */
+    transform: scale(1.05) !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4) !important;
 }
 
 .toolbar-btn-sm.active {
-    background-color: #3b82f6;
-    color: white;
-    border-color: #2563eb;
+    background-color: #3b82f6 !important;
+    color: white !important;
+    border-color: #2563eb !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3) !important;
 }
 
 .toolbar-select-sm {
     padding: 2px 6px;
-    border: 1px solid #d1d5db;
+    border: 1px solid #9ca3af !important; /* More visible border */
     border-radius: 3px;
-    background: white;
+    background: #ffffff !important;
+    color: #1f2937 !important; /* Dark text for visibility */
     font-size: 12px;
     cursor: pointer;
     min-width: 60px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Back button styling - Improved visibility */
+#btn-back-to-dashboard-review,
+#btn-back-to-dashboard-approved,
+#btn-back-to-projects {
+    background-color: #4b5563 !important;
+    color: #ffffff !important;
+    border: 2px solid #374151 !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+#btn-back-to-dashboard-review:hover,
+#btn-back-to-dashboard-approved:hover,
+#btn-back-to-projects:hover {
+    background-color: #374151 !important;
+    border-color: #1f2937 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
 }
 
 .toolbar-select-sm:focus {
@@ -453,14 +498,14 @@
     border-color: #3b82f6;
 }
 
-/* Legacy toolbar buttons (keep for compatibility) */
+/* Legacy toolbar buttons (keep for compatibility) - DARK THEME */
 .toolbar-btn {
     padding: 6px 8px;
     margin: 1px;
-    border: 1px solid transparent;
+    border: 1px solid #4b5563;
     border-radius: 4px;
-    background: transparent;
-    color: #374151;
+    background: #374151; /* Dark background */
+    color: #f9fafb; /* Light text */
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -469,8 +514,9 @@
 }
 
 .toolbar-btn:hover {
-    background-color: #e5e7eb;
-    border-color: #d1d5db;
+    background-color: #4b5563; /* Lighter dark gray */
+    border-color: #6b7280;
+    color: #ffffff; /* Pure white on hover */
 }
 
 .toolbar-btn.active {
@@ -770,4 +816,229 @@
     border-right: 6px solid transparent !important;
     border-top: 8px solid #1f2937 !important;
     pointer-events: none !important;
+}
+
+/* Review View Layout Fixes */
+#view-review {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 40 !important;
+    background: white !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#view-review.hidden {
+    display: none !important;
+}
+
+/* Override main container constraints for review view */
+#view-review > .flex-1 {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Ensure proper grid layout for review main area - FORCE side-by-side */
+#view-review .grid {
+    height: calc(100vh - 160px) !important;
+    min-height: 500px !important;
+    overflow: hidden !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important; /* Force 50/50 split */
+    gap: 1rem !important;
+}
+
+#view-review .grid > div {
+    height: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Editor and preview specific heights */
+#view-review .flex-col {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+}
+
+#view-review #transcription-editor,
+#view-review #transcription-source {
+    flex: 1 !important;
+    height: auto !important;
+    min-height: 300px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+
+/* Fix for potential conflicting styles */
+#view-review * {
+    box-sizing: border-box !important;
+}
+
+/* Ensure toolbar and buttons are visible and accessible */
+#view-review #editor-toolbar {
+    flex-shrink: 0 !important;
+    z-index: 50 !important;
+}
+
+/* Fix button visibility issues - Enhanced with better contrast */
+#view-review button,
+#view-review .bg-gray-500,
+#view-review .bg-blue-500,
+#view-review .bg-green-600 {
+    position: relative !important;
+    color: white !important;
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Export PDF button specific styling - UPDATED */
+#btn-export-pdf,
+#btn-export-docx,
+button[id*="export"] {
+    background-color: #dc2626 !important; /* Red for PDF */
+    color: white !important;
+    border: 1px solid #b91c1c !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+
+#btn-export-pdf:hover,
+#btn-export-docx:hover,
+button[id*="export"]:hover {
+    background-color: #b91c1c !important;
+    border-color: #991b1b !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3) !important;
+}
+
+/* Smart Headers button styling */
+#btn-smart-headers {
+    background-color: #7c3aed !important; /* Purple for smart features */
+    color: white !important;
+    border: 1px solid #6d28d9 !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+
+#btn-smart-headers:hover {
+    background-color: #6d28d9 !important;
+    border-color: #5b21b6 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(124, 58, 237, 0.3) !important;
+}
+
+/* Back button visibility */
+#btn-back,
+button[id*="back"] {
+    background-color: #6b7280 !important;
+    color: white !important;
+    border: 1px solid #4b5563 !important;
+    font-weight: 500 !important;
+}
+
+#btn-back:hover,
+button[id*="back"]:hover {
+    background-color: #4b5563 !important;
+    border-color: #374151 !important;
+}
+
+/* General button enhancements */
+#view-review button {
+    z-index: 45 !important;
+    pointer-events: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+/* Specific button color fixes with maximum specificity */
+#view-review #btn-back-to-projects,
+button#btn-back-to-projects {
+    background-color: #6b7280 !important; /* gray-500 */
+    color: white !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: inline-flex !important;
+    z-index: 50 !important;
+    border: none !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 0.25rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+    cursor: pointer !important;
+}
+
+#view-review #btn-back-to-projects:hover,
+button#btn-back-to-projects:hover {
+    background-color: #4b5563 !important; /* gray-600 */
+    color: white !important;
+}
+
+#view-review #btn-save-draft,
+button#btn-save-draft {
+    background-color: #3b82f6 !important; /* blue-500 */
+    color: white !important;
+    border: none !important;
+    padding: 0.375rem 0.75rem !important;
+    border-radius: 0.25rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+    cursor: pointer !important;
+    z-index: 50 !important;
+}
+
+#view-review #btn-save-draft:hover,
+button#btn-save-draft:hover {
+    background-color: #2563eb !important; /* blue-600 */
+    color: white !important;
+}
+
+#view-review #btn-approve-final,
+button#btn-approve-final {
+    background-color: #059669 !important; /* green-600 */
+    color: white !important;
+    border: none !important;
+    padding: 0.375rem 1rem !important;
+    border-radius: 0.25rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    z-index: 50 !important;
+}
+
+#view-review #btn-approve-final:hover,
+button#btn-approve-final:hover {
+    background-color: #047857 !important; /* green-700 */
+    color: white !important;
+}
+
+/* Override any Tailwind classes that might conflict */
+.bg-gray-500#btn-back-to-projects,
+.bg-blue-500#btn-save-draft,
+.bg-green-600#btn-approve-final {
+    background-color: inherit !important;
+    color: white !important;
+}
+
+/* Force button text to be white regardless of other styles */
+#view-review button span,
+#view-review button,
+#btn-back-to-projects *,
+#btn-save-draft *,
+#btn-approve-final * {
+    color: white !important;
+}
+
+/* Preview section styling */
+#view-review #transcription-preview {
+    height: 100% !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
 }

@@ -160,6 +160,9 @@ const UTILS = {
 
     // Sanitize filename
     sanitizeFilename: (filename) => {
+        if (!filename || typeof filename !== 'string') {
+            return 'untitled_project';
+        }
         return filename.replace(/[^a-z0-9\-_\.]/gi, '_');
     },
 

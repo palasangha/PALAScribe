@@ -1611,6 +1611,115 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
         }
     }
 
+    // Export as PDF using browser print functionality
+    exportPdf() {
+        console.log('📄 exportPdf() called');
+        
+        if (!this.currentProject || !this.elements.transcriptionEditor) {
+            console.error('❌ Missing currentProject or transcriptionEditor for PDF export');
+            this.showErrorMessage('Cannot export PDF: No project selected or editor not found');
+            return;
+        }
+        
+        console.log('✅ Exporting PDF for project:', this.currentProject.name);
+        
+        try {
+            const finalText = this.getRichTextContent(false); // Get formatted HTML
+            const projectName = UTILS.sanitizeFilename(this.currentProject.name);
+            
+            if (!finalText || finalText.trim().length === 0) {
+                this.showErrorMessage('Cannot export empty transcription');
+                return;
+            }
+            
+            // Create PDF content in a new window for printing
+            const projectInfo = {
+                name: this.currentProject.name,
+                assignedTo: this.currentProject.assignedTo || 'Unassigned',
+                audioFileName: this.currentProject.audioFileName || 'Unknown',
+                dateCreated: new Date(this.currentProject.created).toLocaleDateString(),
+                dateExported: new Date().toLocaleDateString(),
+                wordCount: finalText.replace(/<[^>]*>/g, '').trim().split(/\s+/).length,
+                characterCount: finalText.replace(/<[^>]*>/g, '').length
+            };
+            
+            const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>${projectName} - Final Transcription</title>
+                <style>
+                    @media print {
+                        body { margin: 0.5in; font-family: 'Times New Roman', serif; line-height: 1.6; }
+                        .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .project-info { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-bottom: 20px; }
+                        .label { font-weight: bold; }
+                        .content { padding-top: 20px; }
+                        h1 { font-size: 24px; margin: 0; }
+                        h2 { font-size: 20px; margin: 15px 0 10px 0; }
+                        h3 { font-size: 18px; margin: 12px 0 8px 0; }
+                        p { margin: 8px 0; }
+                        .pali-text { background-color: #f0e6ff; padding: 1px 3px; }
+                    }
+                    @media screen {
+                        body { max-width: 8.5in; margin: 20px auto; padding: 20px; font-family: 'Times New Roman', serif; line-height: 1.6; }
+                        .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .project-info { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-bottom: 20px; }
+                        .label { font-weight: bold; }
+                        .content { padding-top: 20px; }
+                        .print-instruction { background: #e3f2fd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="print-instruction">
+                    <strong>PDF Export Instructions:</strong> Use your browser's print function (Ctrl+P or Cmd+P) and select "Save as PDF" to create a PDF file.
+                </div>
+                
+                <div class="header">
+                    <h1>${projectInfo.name} - Final Transcription</h1>
+                </div>
+                
+                <div class="project-info">
+                    <span class="label">Project:</span><span>${projectInfo.name}</span>
+                    <span class="label">Assigned to:</span><span>${projectInfo.assignedTo}</span>
+                    <span class="label">Audio File:</span><span>${projectInfo.audioFileName}</span>
+                    <span class="label">Date Created:</span><span>${projectInfo.dateCreated}</span>
+                    <span class="label">Date Exported:</span><span>${projectInfo.dateExported}</span>
+                    <span class="label">Word Count:</span><span>${projectInfo.wordCount}</span>
+                    <span class="label">Character Count:</span><span>${projectInfo.characterCount}</span>
+                </div>
+                
+                <div class="content">
+                    <h2>Transcription:</h2>
+                    ${finalText}
+                </div>
+                
+                <script>
+                    // Auto-trigger print dialog after a short delay
+                    setTimeout(function() {
+                        window.print();
+                    }, 1000);
+                </script>
+            </body>
+            </html>
+            `;
+            
+            // Open in new window for printing
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            
+            console.log('📄 PDF export window opened successfully');
+            this.showSuccessMessage('PDF export window opened. Use your browser\'s print function to save as PDF.');
+            
+        } catch (error) {
+            console.error('❌ Error exporting PDF:', error);
+            this.showErrorMessage('Failed to export PDF: ' + error.message);
+        }
+    }
+
     // Setup audio keyboard shortcuts
     setupAudioKeyboardShortcuts() {
         // Remove any existing audio shortcuts

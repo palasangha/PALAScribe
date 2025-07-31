@@ -129,7 +129,8 @@ class UIController {
             btnResetText: document.getElementById('btn-reset-text'),
             btnApproveFinal: document.getElementById('btn-approve-final'),
             btnDownloadFinal: document.getElementById('btn-download-final'),
-            btnExportDocx: document.getElementById('btn-export-docx'),
+            btnExportPdf: document.getElementById('btn-export-pdf'),
+            btnBackToDashboard: document.getElementById('btn-back-to-dashboard'),
 
             // Projects list
             projectsList: document.getElementById('projects-list'),
@@ -320,9 +321,16 @@ class UIController {
             });
         }
 
-        if (this.elements.btnExportDocx) {
-            this.elements.btnExportDocx.addEventListener('click', () => {
-                this.exportDocx();
+        if (this.elements.btnExportPdf) {
+            this.elements.btnExportPdf.addEventListener('click', () => {
+                this.exportPdf();
+            });
+        }
+
+        if (this.elements.btnBackToDashboard) {
+            this.elements.btnBackToDashboard.addEventListener('click', () => {
+                console.log('🔙 Back to Dashboard button clicked');
+                this.showView('dashboard');
             });
         }
 
@@ -670,12 +678,26 @@ class UIController {
             
             console.log('📎 Attaching audio file to project...');
             // Attach audio file to project
-            await this.projectManager.attachAudioFile(projectId, audioFile, 'local', previewMode);
-            console.log('✅ Audio file attached successfully');
+            const uploadResult = await this.projectManager.attachAudioFile(projectId, audioFile, 'local', previewMode);
+            console.log('✅ Audio file attached successfully:', uploadResult);
             
             if (!this.isProcessing) {
                 // Processing was cancelled
                 throw new Error('Processing was cancelled');
+            }
+            
+            // Small delay to ensure database transaction is committed
+            console.log('⏳ Waiting for database commit...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Increased to 1 second
+            
+            // Verify the project has the audio file before proceeding
+            console.log('🔍 Verifying project has audio file...');
+            await this.projectManager.loadProjects(); // Refresh projects from server
+            const updatedProject = this.projectManager.projects.find(p => p.id === projectId);
+            console.log('📋 Updated project data:', updatedProject);
+            
+            if (!updatedProject || (!updatedProject.audioFilePath && !updatedProject.audio_file_path)) {
+                throw new Error('Audio file was not properly associated with the project. Please try again.');
             }
             
             console.log('🔄 Starting Whisper backend processing...');
@@ -1124,9 +1146,6 @@ class UIController {
             <td class="px-4 py-3 text-sm text-gray-500">
                 ${formattedDate}
             </td>
-            <td class="px-4 py-3 text-sm text-gray-500" title="${UTILS.escapeHtml(audioFileName)}">
-                ${UTILS.escapeHtml(audioFileName)}
-            </td>
             <td class="px-4 py-3 text-sm text-gray-500" title="${UTILS.escapeHtml(assignedTo)}">
                 ${UTILS.escapeHtml(assignedTo)}
             </td>
@@ -1454,6 +1473,12 @@ class UIController {
             if (!project) {
                 console.error('❌ Project not found:', projectId);
                 this.showErrorMessage('Project not found');
+                return;
+            }
+
+            if (!project.name) {
+                console.error('❌ Project name is missing for project:', projectId);
+                this.showErrorMessage('Project name is missing. Cannot download transcription.');
                 return;
             }
 
@@ -1987,14 +2012,22 @@ class UIController {
     }
 
     // Open a specific project for editing
-    openProject(projectId) {
+    async openProject(projectId) {
         console.log('📂 Opening project for editing:', projectId);
         try {
-            const project = this.projectManager.getProject(projectId);
+            // Force fresh data fetch to ensure we have complete project data including audio info
+            const project = await this.projectManager.getProject(projectId, true);
             if (!project) {
                 this.showErrorMessage('Project not found');
                 return;
             }
+            
+            console.log('📂 Retrieved project data:', {
+                name: project.name,
+                audioUrl: project.audioUrl,
+                audioFilePath: project.audioFilePath,
+                audioFileName: project.audioFileName
+            });
             
             this.showReviewView(project);
         } catch (error) {
@@ -2059,6 +2092,341 @@ class UIController {
         console.log('🛑 User confirmed cancelling processing...');
         this.hideCancelProcessingModal();
         this.cancelCurrentProcessing();
+    }
+
+    async approveFinal() {
+        console.log('🎯 approveFinal() called');
+        console.log('🔍 Current project status:', {
+            currentProject: this.currentProject,
+            hasProject: !!this.currentProject,
+            projectName: this.currentProject?.name,
+            projectId: this.currentProject?.id
+        });
+        
+        if (!this.currentProject || !this.elements.transcriptionEditor) {
+            console.error('❌ Missing currentProject or transcriptionEditor:', {
+                currentProject: !!this.currentProject,
+                transcriptionEditor: !!this.elements.transcriptionEditor
+            });
+            this.showErrorMessage('No project selected or editor not found');
+            return;
+        }
+        
+        if (!this.currentProject.name) {
+            console.error('❌ Project name is missing');
+            this.showErrorMessage('Project name is missing. Cannot approve project.');
+            return;
+        }
+        
+        console.log('✅ Current project found:', this.currentProject.name);
+        
+        const finalText = this.getRichTextContent(true).trim(); // Get plain text
+        const richContent = this.getRichTextContent(false); // Get HTML content
+        const projectName = UTILS.sanitizeFilename(this.currentProject.name);
+        
+        console.log('📝 Final text length:', finalText.length);
+        
+        if (!finalText) {
+            this.showErrorMessage('Please enter some text before approving');
+            return;
+        }
+        
+        const confirmApprove = confirm('Are you sure you want to approve this transcription as final? This will mark the project as complete.');
+        if (!confirmApprove) {
+            console.log('❌ User cancelled approval');
+            return;
+        }
+        
+        console.log('✅ User confirmed approval, proceeding...');
+        
+        // Re-apply Pali highlighting to the final text
+        const formattedFinalText = this.highlightPaliTerms(finalText);
+        try {
+            // Update project to approved status
+            await this.projectManager.updateProject(this.currentProject.id, {
+                editedText: finalText, // Store plain text
+                finalText: finalText, // Store plain final text
+                richContent: richContent, // Store rich text HTML
+                formattedText: formattedFinalText, // Store formatted version for display
+                status: 'Approved',
+                approvedDate: new Date().toISOString(),
+                lastEdited: new Date().toISOString()
+            });
+            
+            console.log('✅ Project updated successfully');
+            
+            this.showSuccessMessage(`Project "${this.currentProject.name}" has been approved and finalized!`);
+            console.log('✅ Project approved:', this.currentProject.name);
+            
+            // Return to dashboard view
+            setTimeout(() => {
+                this.showView('dashboard');
+            }, 2000);
+        } catch (error) {
+            console.error('❌ Error approving project:', error);
+            this.showErrorMessage('Failed to approve project: ' + error.message);
+        }
+    }
+    
+    // Export as PDF using browser print functionality
+    exportPdf() {
+        console.log('📄 exportPdf() called');
+        console.log('🔍 Current project status:', {
+            currentProject: this.currentProject,
+            hasProject: !!this.currentProject,
+            projectName: this.currentProject?.name,
+            projectId: this.currentProject?.id
+        });
+        
+        if (!this.currentProject || !this.elements.transcriptionEditor) {
+            console.error('❌ Missing currentProject or transcriptionEditor for PDF export');
+            this.showErrorMessage('Cannot export PDF: No project selected or editor not found');
+            return;
+        }
+        
+        if (!this.currentProject.name) {
+            console.error('❌ Project name is missing');
+            this.showErrorMessage('Project name is missing. Cannot export PDF.');
+            return;
+        }
+        
+        console.log('✅ Exporting PDF for project:', this.currentProject.name);
+        
+        try {
+            const finalText = this.getRichTextContent(false); // Get formatted HTML
+            const projectName = UTILS.sanitizeFilename(this.currentProject.name);
+            
+            if (!finalText || finalText.trim().length === 0) {
+                this.showErrorMessage('Cannot export empty transcription');
+                return;
+            }
+            
+            // Create PDF content in a new window for printing
+            const projectInfo = {
+                name: this.currentProject.name,
+                assignedTo: this.currentProject.assignedTo || 'Unassigned',
+                audioFileName: this.currentProject.audioFileName || 'Unknown',
+                dateCreated: new Date(this.currentProject.created).toLocaleDateString(),
+                dateExported: new Date().toLocaleDateString(),
+                wordCount: finalText.replace(/<[^>]*>/g, '').trim().split(/\s+/).length,
+                characterCount: finalText.replace(/<[^>]*>/g, '').length
+            };
+            
+            const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>${projectName} - Final Transcription</title>
+                <style>
+                    @media print {
+                        body { margin: 0.5in; font-family: 'Times New Roman', serif; line-height: 1.6; }
+                        .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .project-info { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-bottom: 20px; }
+                        .label { font-weight: bold; }
+                        .content { padding-top: 20px; }
+                        h1 { font-size: 24px; margin: 0; }
+                        h2 { font-size: 20px; margin: 15px 0 10px 0; }
+                        h3 { font-size: 18px; margin: 12px 0 8px 0; }
+                        p { margin: 8px 0; }
+                        .pali-text { background-color: #f0e6ff; padding: 1px 3px; }
+                    }
+                    @media screen {
+                        body { max-width: 8.5in; margin: 20px auto; padding: 20px; font-family: 'Times New Roman', serif; line-height: 1.6; }
+                        .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .project-info { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-bottom: 20px; }
+                        .label { font-weight: bold; }
+                        .content { padding-top: 20px; }
+                        .print-instruction { background: #e3f2fd; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="print-instruction">
+                    <strong>PDF Export Instructions:</strong> Use your browser's print function (Ctrl+P or Cmd+P) and select "Save as PDF" to create a PDF file.
+                </div>
+                
+                <div class="header">
+                    <h1>${projectInfo.name} - Final Transcription</h1>
+                </div>
+                
+                <div class="project-info">
+                    <span class="label">Project:</span><span>${projectInfo.name}</span>
+                    <span class="label">Assigned to:</span><span>${projectInfo.assignedTo}</span>
+                    <span class="label">Audio File:</span><span>${projectInfo.audioFileName}</span>
+                    <span class="label">Date Created:</span><span>${projectInfo.dateCreated}</span>
+                    <span class="label">Date Exported:</span><span>${projectInfo.dateExported}</span>
+                    <span class="label">Word Count:</span><span>${projectInfo.wordCount}</span>
+                    <span class="label">Character Count:</span><span>${projectInfo.characterCount}</span>
+                </div>
+                
+                <div class="content">
+                    <h2>Transcription:</h2>
+                    ${finalText}
+                </div>
+                
+                <script>
+                    // Auto-trigger print dialog after a short delay
+                    setTimeout(function() {
+                        window.print();
+                    }, 1000);
+                </script>
+            </body>
+            </html>
+            `;
+            
+            // Open in new window for printing
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            
+            console.log('📄 PDF export window opened successfully');
+            this.showSuccessMessage('PDF export window opened. Use your browser\'s print function to save as PDF.');
+            
+        } catch (error) {
+            console.error('❌ Error exporting PDF:', error);
+            this.showErrorMessage('Failed to export PDF: ' + error.message);
+        }
+    }
+    
+    // Create document content for DOCX
+    createDocumentContent(transcriptionText) {
+        const projectInfo = {
+            name: this.currentProject.name,
+            assignedTo: this.currentProject.assignedTo || 'Unassigned',
+            audioFileName: this.currentProject.audioFileName || 'Unknown',
+            dateCreated: new Date(this.currentProject.created).toLocaleDateString(),
+            dateExported: new Date().toLocaleDateString(),
+            wordCount: transcriptionText.trim().split(/\s+/).length,
+            characterCount: transcriptionText.length
+        };
+        
+        // Create RTF-style content that's compatible with Word
+        const rtfHeader = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}`;
+        const rtfContent = `
+\\f0\\fs24 
+\\b\\fs32 ${projectInfo.name} - Final Transcription\\b0\\fs24\\par
+\\par
+\\b Project:\\b0 ${projectInfo.name}\\par
+\\b Assigned to:\\b0 ${projectInfo.assignedTo}\\par
+\\b Audio File:\\b0 ${projectInfo.audioFileName}\\par
+\\b Date Created:\\b0 ${projectInfo.dateCreated}\\par
+\\b Date Exported:\\b0 ${projectInfo.dateExported}\\par
+\\b Word Count:\\b0 ${projectInfo.wordCount}\\par
+\\b Character Count:\\b0 ${projectInfo.characterCount}\\par
+\\par
+\\b Transcription:\\b0\\par
+\\par
+${transcriptionText.replace(/\n/g, '\\par ')}
+}`;
+        
+        return rtfHeader + rtfContent;
+    }
+    
+    // Get rich text content (HTML or plain text)
+    getRichTextContent(asPlainText = false) {
+        const editor = this.elements.transcriptionEditor;
+        if (!editor) return '';
+        
+        if (asPlainText) {
+            return editor.textContent || editor.innerText || '';
+        } else {
+            return editor.innerHTML || '';
+        }
+    }
+    
+    // Save draft functionality
+    saveDraft() {
+        console.log('💾 saveDraft() called');
+        
+        if (!this.currentProject || !this.elements.transcriptionEditor) {
+            console.error('❌ Missing currentProject or transcriptionEditor for save draft');
+            this.showErrorMessage('Cannot save draft: No project selected or editor not found');
+            return;
+        }
+        
+        if (!this.currentProject.name) {
+            console.error('❌ Project name is missing');
+            this.showErrorMessage('Project name is missing. Cannot save draft.');
+            return;
+        }
+        
+        console.log('✅ Saving draft for project:', this.currentProject.name);
+        
+        try {
+            const draftText = this.getRichTextContent(true); // Get plain text
+            const richContent = this.getRichTextContent(false); // Get HTML content
+            
+            if (!draftText || draftText.trim().length === 0) {
+                this.showErrorMessage('Cannot save empty draft');
+                return;
+            }
+            
+            // Update project with draft content
+            const updateData = {
+                editedText: draftText,
+                richContent: richContent,
+                status: CONFIG.PROJECT_STATUS.NEEDS_REVIEW,
+                lastModified: new Date().toISOString()
+            };
+            
+            this.projectManager.updateProject(this.currentProject.id, updateData);
+            
+            // Update current project reference
+            this.currentProject = this.projectManager.getProject(this.currentProject.id);
+            
+            // Show success message
+            this.showSuccessMessage('Draft saved successfully!');
+            
+            // Update word count to reflect any changes
+            this.updateWordCount();
+            
+            console.log('✅ Draft saved successfully');
+            
+        } catch (error) {
+            console.error('❌ Error saving draft:', error);
+            this.showErrorMessage('Error saving draft: ' + error.message);
+        }
+    }
+    
+    // Reset to original transcription text
+    resetToOriginalText() {
+        console.log('🔄 resetToOriginalText() called');
+        
+        if (!this.currentProject || !this.elements.transcriptionEditor) {
+            console.error('❌ Missing currentProject or transcriptionEditor for reset');
+            return;
+        }
+        
+        const confirmReset = confirm('Are you sure you want to reset to the original transcription? All changes will be lost.');
+        if (!confirmReset) {
+            return;
+        }
+        
+        try {
+            // Get the original transcription (prioritize formattedText, then transcription)
+            const originalText = this.originalTranscription || this.currentProject.formattedText || this.currentProject.transcription || '';
+            
+            if (!originalText) {
+                this.showErrorMessage('No original transcription found to reset to');
+                return;
+            }
+            
+            // Check if original text has HTML formatting
+            const hasHTML = /<[^>]*>/.test(originalText);
+            this.setRichTextContent(originalText, hasHTML);
+            
+            // Update word count
+            this.updateWordCount();
+            this.updateTranscriptionPreview();
+            
+            this.showSuccessMessage('Text reset to original transcription');
+            console.log('✅ Text reset to original successfully');
+            
+        } catch (error) {
+            console.error('❌ Error resetting text:', error);
+            this.showErrorMessage('Error resetting text: ' + error.message);
+        }
     }
 }
 

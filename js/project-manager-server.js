@@ -64,18 +64,27 @@ class ServerProjectManager {
     }
 
     // Get project by ID (from cache or server)
-    async getProject(projectId) {
-        // Try cache first
-        let project = this.projects.find(p => p.id === projectId);
-        if (project) {
-            return project;
+    async getProject(projectId, forceFresh = false) {
+        // If forcing fresh data or not in cache, fetch from server
+        if (!forceFresh) {
+            let project = this.projects.find(p => p.id === projectId);
+            if (project) {
+                console.log('📋 Returning cached project:', project.name);
+                return project;
+            }
         }
 
         // Fetch from server
         try {
+            console.log('🌐 Fetching fresh project data from server for:', projectId);
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}`);
             if (response.ok) {
-                project = await response.json();
+                const project = await response.json();
+                console.log('📥 Received project data:', {
+                    name: project.name,
+                    audioUrl: project.audioUrl,
+                    audioFilePath: project.audioFilePath
+                });
                 
                 // Update cache
                 const index = this.projects.findIndex(p => p.id === projectId);
@@ -194,6 +203,11 @@ class ServerProjectManager {
             
         } catch (error) {
             console.error('❌ Error uploading audio file:', error);
+            console.error('❌ Full error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response || 'No response object'
+            });
             throw error;
         }
     }

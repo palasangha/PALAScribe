@@ -60,7 +60,10 @@ class ProjectManager {
 
     // Get project by name
     getProjectByName(name) {
-        return this.projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+        if (!name || typeof name !== 'string') {
+            return null;
+        }
+        return this.projects.find(p => p && p.name && p.name.toLowerCase() === name.toLowerCase());
     }
 
     // Generate unique project name by appending _1, _2, etc. if duplicates exist
@@ -384,7 +387,31 @@ class ProjectManager {
         try {
             const stored = localStorage.getItem(CONFIG.STORAGE_KEYS.PROJECTS);
             if (stored) {
-                this.projects = JSON.parse(stored);
+                const loadedProjects = JSON.parse(stored);
+                // Validate and clean up projects data
+                this.projects = loadedProjects.filter(project => {
+                    // Ensure project has a valid name property
+                    if (!project || typeof project !== 'object') {
+                        console.warn('Removing invalid project (not an object):', project);
+                        return false;
+                    }
+                    if (!project.name || typeof project.name !== 'string' || project.name.trim() === '') {
+                        console.warn('Removing project with invalid name:', project);
+                        return false;
+                    }
+                    // Ensure project has required properties
+                    if (!project.id) {
+                        console.warn('Removing project without ID:', project);
+                        return false;
+                    }
+                    return true;
+                });
+                
+                // Save cleaned projects back to storage if any were removed
+                if (this.projects.length !== loadedProjects.length) {
+                    console.log(`Cleaned up projects: ${loadedProjects.length} → ${this.projects.length}`);
+                    this.saveProjects();
+                }
             }
         } catch (error) {
             console.error('Failed to load projects:', error);
