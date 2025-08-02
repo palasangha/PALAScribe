@@ -136,43 +136,55 @@
                 <p class="text-gray-600">Manage your audio transcription projects efficiently.</p>
             </div>
 
-            <!-- Dashboard Cards -->
-            <div class="grid grid-cols-3 gap-6 mb-8">
-                <!-- Start Audio Conversion -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                        <span class="mr-2">🎙️</span>
-                        Start Audio Conversion
-                    </h3>
-                    <p class="text-gray-600 mb-6 text-sm">Upload and transcribe new audio files with intelligent Pali correction.</p>
-                    <button id="btn-start-conversion" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                        Start New Project
-                    </button>
+            <!-- Quick Actions Section -->
+            <div class="mb-12">
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Quick Actions</h3>
+                    <div class="h-px bg-gradient-to-r from-blue-500 to-transparent"></div>
                 </div>
+                <div class="grid grid-cols-3 gap-6">
+                    <!-- Start Audio Conversion -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                            <span class="mr-2">🎙️</span>
+                            Start Audio Conversion
+                        </h3>
+                        <p class="text-gray-600 mb-6 text-sm">Upload and transcribe new audio files with intelligent Pali correction.</p>
+                        <button id="btn-start-conversion" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
+                            Start New Project
+                        </button>
+                    </div>
 
-                <!-- Ready for Review -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-ready-review">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                        <span class="mr-2">📝</span>
-                        Ready for Review
-                    </h3>
-                    <p class="text-gray-600 mb-6 text-sm">View and edit transcriptions that need review and approval.</p>
-                    <button class="bg-white hover:bg-orange-50 text-blue-600 border border-blue-600 px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                        View Pending
-                    </button>
-                </div>
+                    <!-- Ready for Review -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-ready-review">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                            <span class="mr-2">📝</span>
+                            Ready for Review
+                        </h3>
+                        <p class="text-gray-600 mb-6 text-sm">View and edit transcriptions that need review and approval.</p>
+                        <button class="bg-white hover:bg-orange-50 text-blue-600 border border-blue-600 px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
+                            View Pending
+                        </button>
+                    </div>
 
-                <!-- Approved Projects -->
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-approved">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                        <span class="mr-2">✅</span>
-                        Approved
-                    </h3>
-                    <p class="text-gray-600 mb-6 text-sm">Access completed and approved transcription projects.</p>
-                    <button class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                        View Approved
-                    </button>
+                    <!-- Approved Projects -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-approved">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                            <span class="mr-2">✅</span>
+                            Approved
+                        </h3>
+                        <p class="text-gray-600 mb-6 text-sm">Access completed and approved transcription projects.</p>
+                        <button class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
+                            View Approved
+                        </button>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Projects Management Section -->
+            <div class="mb-6">
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">Projects Management</h3>
+                <div class="h-px bg-gradient-to-r from-green-500 to-transparent"></div>
             </div>
 
             <!-- Recent Projects Table -->
