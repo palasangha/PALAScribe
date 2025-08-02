@@ -819,11 +819,8 @@ class UIController {
         // Add header indicating this is generated content
         formatted = '=== GENERATED TRANSCRIPTION ===\n\n' + formatted;
         
-        // Auto-paragraph: Split on sentence boundaries followed by longer pauses
-        formatted = formatted.replace(/([.!?])\s{2,}/g, '$1\n\n');
-        
-        // Add paragraph breaks for typical speech patterns
-        formatted = formatted.replace(/(\w+[.!?])\s+(Well|So|Now|Then|And then|But|However|Actually)/g, '$1\n\n$2');
+        // Apply automatic paragraph formatting for longer texts
+        formatted = this.addAutomaticParagraphs(formatted);
         
         // Highlight potential Pali terms (words that might be transliterated)
         formatted = this.highlightPaliTerms(formatted);
@@ -832,6 +829,160 @@ class UIController {
         formatted += '\n\n=== END TRANSCRIPTION ===';
         
         return formatted;
+    }
+
+    // Add intelligent automatic paragraph breaks for longer transcriptions
+    addAutomaticParagraphs(text) {
+        console.log('📝 Adding automatic paragraphs to text of length:', text.length);
+        
+        // Skip automatic paragraphing for short texts (less than 500 characters)
+        if (text.length < 500) {
+            console.log('📝 Text too short for automatic paragraphs, applying basic formatting');
+            // Just apply basic sentence break formatting
+            return text.replace(/([.!?])\s{2,}/g, '$1\n\n');
+        }
+
+        let formatted = text;
+        
+        // Step 1: Clean up existing formatting
+        formatted = formatted.replace(/\n+/g, ' ').trim();
+        
+        // Step 2: Add paragraph breaks after sentences with strong indicators
+        // Discourse markers and transition words that often start new paragraphs
+        const paragraphMarkers = [
+            'Well', 'So', 'Now', 'Then', 'And then', 'But', 'However', 'Actually', 
+            'Furthermore', 'Moreover', 'In addition', 'On the other hand', 
+            'Meanwhile', 'Later', 'Afterwards', 'Subsequently', 'Therefore',
+            'As a result', 'Consequently', 'In conclusion', 'To summarize',
+            'First', 'Second', 'Third', 'Finally', 'Next', 'Previously',
+            'For example', 'For instance', 'In other words', 'That is to say',
+            'Let me explain', 'To clarify', 'What I mean is', 'In fact',
+            'Interestingly', 'Importantly', 'Notably', 'Significantly'
+        ];
+        
+        // Create regex pattern for discourse markers
+        const markerPattern = new RegExp(`([.!?])\\s+(${paragraphMarkers.join('|')})\\b`, 'gi');
+        formatted = formatted.replace(markerPattern, '$1\n\n$2');
+        
+        // Step 3: Add breaks after sentences with multiple spaces (indicating pauses)
+        formatted = formatted.replace(/([.!?])\s{3,}/g, '$1\n\n');
+        
+        // Step 4: Add breaks after sentences followed by quotation or direct speech
+        formatted = formatted.replace(/([.!?])\s+(["'"'"])/g, '$1\n\n$2');
+        
+        // Step 5: Add breaks before questions when preceded by statements
+        formatted = formatted.replace(/([.!])\s+([A-Z][^.!?]*\?)/g, '$1\n\n$2');
+        
+        // Step 6: Handle long continuous text by adding breaks at sentence boundaries
+        // Split into sentences and group them into reasonable paragraphs
+        const sentences = formatted.split(/(?<=[.!?])\s+/);
+        const paragraphs = [];
+        let currentParagraph = [];
+        let currentLength = 0;
+        const maxParagraphLength = 400; // characters
+        const maxSentencesPerParagraph = 5;
+        
+        sentences.forEach((sentence, index) => {
+            sentence = sentence.trim();
+            if (!sentence) return;
+            
+            // Check if adding this sentence would make paragraph too long
+            const wouldBeTooLong = currentLength + sentence.length > maxParagraphLength;
+            const tooManySentences = currentParagraph.length >= maxSentencesPerParagraph;
+            
+            // Start new paragraph if current one is getting too long or has too many sentences
+            if ((wouldBeTooLong || tooManySentences) && currentParagraph.length > 0) {
+                paragraphs.push(currentParagraph.join(' '));
+                currentParagraph = [sentence];
+                currentLength = sentence.length;
+            } else {
+                currentParagraph.push(sentence);
+                currentLength += sentence.length + 1; // +1 for space
+            }
+        });
+        
+        // Add the last paragraph
+        if (currentParagraph.length > 0) {
+            paragraphs.push(currentParagraph.join(' '));
+        }
+        
+        // Join paragraphs with double line breaks
+        formatted = paragraphs.join('\n\n');
+        
+        // Step 7: Clean up any triple+ line breaks
+        formatted = formatted.replace(/\n{3,}/g, '\n\n');
+        
+        // Step 8: Ensure proper spacing around the header
+        formatted = formatted.replace(/^(=== GENERATED TRANSCRIPTION ===)\s*/, '$1\n\n');
+        
+        console.log(`📝 Paragraph formatting complete: ${paragraphs.length} paragraphs created`);
+        
+        return formatted;
+    }
+
+    // Apply automatic paragraph formatting to the current editor content
+    applyAutoParagraphing() {
+        console.log('📝 Applying auto-paragraphing to current editor content');
+        
+        if (!this.elements.transcriptionEditor) {
+            console.error('❌ Transcription editor not found');
+            return;
+        }
+
+        try {
+            // Get current content as plain text
+            const currentText = this.elements.transcriptionEditor.textContent || this.elements.transcriptionEditor.innerText || '';
+            
+            if (!currentText || currentText.trim().length < 100) {
+                this.showNotification('Text too short for auto-paragraphing (minimum 100 characters)', 'info', 3000);
+                return;
+            }
+
+            console.log('📝 Current text length:', currentText.length);
+
+            // Apply the automatic paragraph formatting
+            const formattedText = this.addAutomaticParagraphs(currentText);
+            
+            // Convert the formatted text to HTML with proper paragraph tags
+            const htmlContent = this.convertTextToParagraphHTML(formattedText);
+            
+            // Update the editor content
+            this.elements.transcriptionEditor.innerHTML = htmlContent;
+            
+            // Update preview and word count
+            this.updateTranscriptionPreview();
+            this.updateWordCount();
+            
+            // Show success notification
+            this.showNotification('Auto-paragraphing applied successfully!', 'success', 3000);
+            console.log('✅ Auto-paragraphing applied successfully');
+            
+        } catch (error) {
+            console.error('❌ Error applying auto-paragraphing:', error);
+            this.showNotification('Error applying auto-paragraphing: ' + error.message, 'error', 5000);
+        }
+    }
+
+    // Convert plain text with line breaks to HTML with paragraph tags
+    convertTextToParagraphHTML(text) {
+        if (!text) return '';
+        
+        // Split text into paragraphs based on double line breaks
+        const paragraphs = text.split(/\n\s*\n/);
+        
+        // Convert each paragraph to HTML, preserving single line breaks as <br>
+        const htmlParagraphs = paragraphs.map(paragraph => {
+            paragraph = paragraph.trim();
+            if (!paragraph) return '';
+            
+            // Replace single line breaks with <br> tags
+            const formattedParagraph = paragraph.replace(/\n/g, '<br>');
+            
+            // Wrap in paragraph tags
+            return `<p>${formattedParagraph}</p>`;
+        }).filter(p => p); // Remove empty paragraphs
+        
+        return htmlParagraphs.join('\n\n');
     }
 
     // Highlight potential Pali terms in text
@@ -1853,7 +2004,9 @@ class UIController {
                 const btn = (e.target.classList.contains('toolbar-btn') || e.target.classList.contains('toolbar-btn-sm')) ? e.target : (e.target.closest('.toolbar-btn') || e.target.closest('.toolbar-btn-sm'));
                 const command = btn.getAttribute('data-command');
                 console.log('🎯 Executing toolbar command:', command);
-                if (command && command !== 'removeFormat') {
+                if (command === 'autoParagraph') {
+                    this.applyAutoParagraphing();
+                } else if (command && command !== 'removeFormat') {
                     this.executeCommand(command, null);
                 } else if (command === 'removeFormat') {
                     this.executeCommand('removeFormat', null);

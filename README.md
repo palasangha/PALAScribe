@@ -1,469 +1,476 @@
-# PALAScribe - Audio-to-Text Converter
+# PALAScribe - Advanced Audio Transcription for Pali & Dharma Content
 
-A web-based application for converting audio files to text with specialized Pali word recognition, designed for VRI content transcription. Features a consolidated server architecture with multi-user support, database persistence, and local OpenAI Whisper processing.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
+[![OpenAI Whisper](https://img.shields.io/badge/OpenAI-Whisper-orange.svg)](https://github.com/openai/whisper)
 
-## Features
+PALAScribe is a specialized web application for transcribing Pali teachings, dharma talks, and Buddhist educational content. It combines OpenAI's Whisper AI with intelligent post-processing to deliver accurate, professionally formatted transcriptions with automatic Pali term highlighting and intelligent paragraph formatting.
 
-🎵 **Audio Transcription**
-- Upload audio files (MP3, WAV, M4A, FLAC, OGG)
-- Convert to text using local OpenAI Whisper
-- Privacy-focused: all processing happens locally
-- Support for various file sizes with preview mode for large files
+## 🚀 Quick Start
 
-📝 **Pali Word Recognition**
-- Automatic detection of Pali Buddhist terms
-- Special formatting for recognized words
-- Extensive built-in Pali dictionary
-
-📊 **Multi-User Project Management**
-- Create and manage transcription projects with database persistence
-- Track project status through workflow stages
-- Search and filter projects
-- User isolation and data persistence across server restarts
-
-📄 **Document Generation**
-- Generate DOCX files from transcriptions
-- Download generated documents
-- Upload reviewed documents
-- Complete review workflow
-
-🏗️ **Consolidated Architecture**
-- Single server handles all functionality (transcription + project management)
-- SQLite database for data persistence
-- RESTful API for all operations
-- No port conflicts or multiple server management
-
-## Quick Start
-
-### Prerequisites
-
-Before using PALAScribe, you need to set up local Whisper. Follow the setup guide below.
-
-### 1. Install Local Whisper
-
-**Option A: Automatic Setup (Recommended)**
 ```bash
-# Run the setup script (macOS/Linux)
-chmod +x whisper-setup-guide.sh
-./whisper-setup-guide.sh
+# Clone the repository
+git clone https://github.com/palasangha/PALAScribe.git
+cd PALAScribe
 
-# For Windows, see manual setup below
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the application
+./start-palascribe.sh
 ```
 
-**Option B: Manual Setup**
+Open your browser to `http://localhost:8080` and start transcribing!
 
-1. **Install Python 3.8+**
-   ```bash
-   # Check Python version
-   python --version
-   # Should be 3.8 or higher
-   ```
+## ✨ Key Features
 
-2. **Install Whisper**
-   ```bash
-   # Install using pip
-   pip install openai-whisper
+- **🎯 AI-Powered Transcription**: State-of-the-art speech recognition using OpenAI Whisper
+- **📝 Rich Text Editing**: Full-featured WYSIWYG editor with formatting tools
+- **🔍 Pali Term Recognition**: Automatic detection and highlighting of Pali/Sanskrit terminology
+- **📄 Intelligent Paragraphing**: Smart paragraph breaks based on speech patterns
+- **🎵 Audio Integration**: Playback controls with keyboard shortcuts (spacebar, arrows)
+- **💾 Project Management**: Organize transcriptions with status tracking and workflow
+- **📊 Export Options**: Generate PDFs and download formatted text files
+- **⚡ Real-time Preview**: Live preview of formatted output as you edit
 
-   # Or install with additional dependencies
-   pip install openai-whisper[all]
-   ```
+## 🏗️ Architecture Overview
 
-3. **Install FFmpeg** (required for audio processing)
-   
-   **macOS (using Homebrew):**
-   ```bash
-   brew install ffmpeg
-   ```
-   
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt update
-   sudo apt install ffmpeg
-   ```
-   
-   **Windows:**
-   - Download from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
-   - Add to system PATH
+PALAScribe uses a modern client-server architecture:
 
-4. **Test Whisper Installation**
-   ```bash
-   # Test with a simple command
-   whisper --help
-   
-   # Download a model (optional - will download on first use)
-   whisper --model medium --language English test-audio.wav
-   ```
+- **Frontend**: HTML5 single-page application with vanilla JavaScript and Tailwind CSS
+- **Backend**: Python Flask server with RESTful API
+- **AI Engine**: OpenAI Whisper for speech-to-text processing
+- **Database**: SQLite for project management and metadata storage
+- **File Storage**: Local filesystem for audio file management
 
-### 2. Start the PALAScribe Server
+## 📋 Prerequisites
 
-1. **Start the consolidated server**
-   ```bash
-   # Option 1: Use the provided script (recommended)
-   ./start-palascribe.sh
-   
-   # Option 2: Start manually
-   python3 palascribe_server.py
-   ```
+### System Requirements
+- **Python**: 3.8 or higher
+- **Node.js**: 14+ (for development tools, optional)
+- **FFmpeg**: For audio processing
+- **Operating System**: macOS, Linux, or Windows
+- **Memory**: 4GB RAM minimum, 8GB recommended
+- **Storage**: 2GB free space for models and audio files
 
-2. **Verify the server is running**
-   - Server should start on `http://localhost:8765`
-   - All services (transcription + project management) run on this single port
-   - Check browser console or visit the URL to confirm
+### Required Python Packages
+- Flask 2.0+
+- SQLite3 (included with Python)
+- OpenAI Whisper
+- Audio processing libraries (librosa, soundfile)
 
-### 3. Open PALAScribe Application
+## 🛠️ Detailed Installation Guide
 
-1. **Launch the application**
-   - Open `index.html` in a modern web browser
-   - Or use the launcher: open `launcher.html` for auto-backend startup
+### Step 1: Clone the Repository
 
-2. **Create Your First Project**
-   - Click "Start Audio Conversion"
-   - Enter a project name
-   - Optionally assign to a reviewer
-   - Upload your audio file
-
-3. **Convert Audio**
-   - Choose preview mode for large files (processes first 60 seconds)
-   - Click "Create Project" to start transcription
-   - Monitor progress in the notification area
-
-4. **Review and Approve**
-   - Navigate to "Ready for Review" to see completed transcriptions
-   - Edit and format the text using the rich text editor
-   - Use "Approve Final" to mark as complete
-   - Download the final transcription
-
-## Project Status Workflow
-
-PALAScribe uses a streamlined status-based workflow:
-
-```
-NEW → PROCESSING → NEEDS_REVIEW → APPROVED
+```bash
+git clone https://github.com/palasangha/PALAScribe.git
+cd PALAScribe
 ```
 
-- **NEW**: Project created, ready for audio upload
-- **PROCESSING**: Audio being transcribed by local Whisper
-- **NEEDS_REVIEW**: Transcription complete, ready for review and editing
-- **APPROVED**: Final transcription approved and downloadable
+### Step 2: Install System Dependencies
 
-## Local Whisper Configuration
+#### macOS (using Homebrew)
+```bash
+# Install FFmpeg for audio processing
+brew install ffmpeg
 
-### Whisper Models
+# Install Python (if not already installed)
+brew install python@3.11
+```
 
-PALAScribe uses the `medium` model by default for balanced accuracy and speed:
+#### Ubuntu/Debian Linux
+```bash
+# Update package list
+sudo apt update
 
-- **tiny**: Fastest, least accurate (~1GB VRAM)
-- **base**: Fast, decent accuracy (~1GB VRAM)
-- **small**: Good balance (~2GB VRAM)
-- **medium**: Better accuracy (~5GB VRAM) - **Default**
-- **large**: Best accuracy (~10GB VRAM)
+# Install FFmpeg and Python
+sudo apt install ffmpeg python3 python3-pip python3-venv
 
-### Backend Server Configuration
+# Install additional audio libraries
+sudo apt install libsndfile1 libsox-dev
+```
 
-The Whisper backend (`whisper_server.py`) can be configured:
+#### Windows
+1. Install Python 3.8+ from [python.org](https://python.org)
+2. Install FFmpeg:
+   - Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+   - Extract and add to system PATH
+3. Install Microsoft Visual C++ Build Tools (for some Python packages)
+
+### Step 3: Create Python Virtual Environment
+
+```bash
+# Create virtual environment
+python3 -m venv palascribe-env
+
+# Activate virtual environment
+# On macOS/Linux:
+source palascribe-env/bin/activate
+
+# On Windows:
+palascribe-env\Scripts\activate
+```
+
+### Step 4: Install Python Dependencies
+
+```bash
+# Upgrade pip
+pip install --upgrade pip
+
+# Install core dependencies
+pip install flask
+pip install openai-whisper
+pip install librosa
+pip install soundfile
+pip install pydub
+
+# Install additional audio processing libraries
+pip install ffmpeg-python
+pip install numpy
+pip install torch torchvision torchaudio
+```
+
+### Step 5: Install Whisper Models
+
+```bash
+# Download Whisper models (this may take several minutes)
+python -c "import whisper; whisper.load_model('base')"
+python -c "import whisper; whisper.load_model('small')"
+
+# Optional: Install larger models for better accuracy
+# python -c "import whisper; whisper.load_model('medium')"
+# python -c "import whisper; whisper.load_model('large')"
+```
+
+### Step 6: Initialize the Database
+
+```bash
+# Run the server once to initialize the database
+python palascribe_server.py
+# Stop with Ctrl+C after you see "Running on http://localhost:5000"
+```
+
+### Step 7: Make Scripts Executable (macOS/Linux)
+
+```bash
+chmod +x start-palascribe.sh
+chmod +x start-whisper-server.sh
+chmod +x auto-whisper.sh
+```
+
+## 🚀 Running PALAScribe
+
+### Option 1: Automated Startup (Recommended)
+
+```bash
+# This script starts all required services
+./start-palascribe.sh
+```
+
+This will:
+1. Start the Whisper AI server on port 8000
+2. Start the main Flask server on port 5000
+3. Open the application in your default browser
+4. Display status information and logs
+
+### Option 2: Manual Startup
+
+Start each component individually for development or troubleshooting:
+
+#### Terminal 1: Start Whisper Server
+```bash
+# Activate virtual environment
+source palascribe-env/bin/activate
+
+# Start Whisper AI service
+python whisper_server.py
+```
+
+#### Terminal 2: Start Main Server
+```bash
+# Activate virtual environment
+source palascribe-env/bin/activate
+
+# Start Flask application server
+python palascribe_server.py
+```
+
+#### Terminal 3: Open Application
+```bash
+# Open the application in your browser
+open index-server.html
+# Or navigate to: file:///path/to/PALAScribe/index-server.html
+```
+
+### Option 3: Development Mode
+
+For development with auto-reload:
+
+```bash
+# Start Flask in development mode
+export FLASK_ENV=development
+export FLASK_DEBUG=1
+python palascribe_server.py
+
+# In another terminal, start Whisper server
+python whisper_server.py --debug
+```
+
+## 📱 Using PALAScribe
+
+### Basic Workflow
+
+1. **Open Application**: Navigate to `index-server.html` in your browser
+2. **Create Project**: Click "New Project" and fill in project details
+3. **Upload Audio**: Select an audio file (MP3, WAV, M4A supported)
+4. **Choose Mode**: 
+   - **Preview**: Quick 30-second transcription for testing
+   - **Full**: Complete transcription of entire audio file
+5. **Review & Edit**: Use the rich text editor to refine the transcription
+6. **Format**: Apply automatic paragraph formatting using the toolbar button
+7. **Export**: Download as PDF or text file when complete
+
+### Keyboard Shortcuts
+
+- **Spacebar**: Play/pause audio
+- **Left Arrow**: Skip backward 10 seconds
+- **Right Arrow**: Skip forward 10 seconds
+- **Ctrl+B**: Bold text
+- **Ctrl+I**: Italic text
+- **Ctrl+U**: Underline text
+- **Ctrl+S**: Save draft
+
+### Project Status Workflow
+
+```
+New → Processing → Needs Review → Approved
+```
+
+- **New**: Project created, ready for transcription
+- **Processing**: Audio being transcribed by Whisper AI
+- **Needs Review**: Transcription complete, ready for editing
+- **Approved**: Final version approved and ready for export
+
+## 🔧 Configuration
+
+### Server Configuration
+
+Edit the configuration in `js/config.js`:
+
+```javascript
+const CONFIG = {
+    PROJECT_STATUS: {
+        NEW: 'New',
+        PROCESSING: 'Processing', 
+        NEEDS_REVIEW: 'Needs Review',
+        APPROVED: 'Approved'
+    },
+    
+    WHISPER: {
+        BACKEND_URL: 'http://localhost:8000',
+        TIMEOUT: 300000,              // 5 minutes
+        MAX_FILE_SIZE: 500 * 1024 * 1024  // 500MB
+    },
+    
+    UI: {
+        NOTIFICATION_DURATION: 5000,
+        AUTO_SAVE_INTERVAL: 30000,    // 30 seconds
+        WORD_COUNT_UPDATE_DELAY: 500
+    }
+};
+```
+
+### Whisper Model Selection
+
+Choose Whisper model based on your needs:
+
+- **tiny**: Fastest, lowest accuracy (~39 MB)
+- **base**: Good balance of speed and accuracy (~74 MB)
+- **small**: Better accuracy, slower (~244 MB)
+- **medium**: High accuracy, slower (~769 MB)
+- **large**: Best accuracy, slowest (~1550 MB)
+
+To change the model, edit `whisper_server.py`:
 
 ```python
-# Default settings
-PORT = 8765
-MODEL = "medium"
-LANGUAGE = "English"
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+# Change this line to use different model
+model = whisper.load_model("base")  # Change to "small", "medium", etc.
 ```
 
-### Troubleshooting Whisper Setup
+### File Upload Limits
 
-**Common Issues:**
+Adjust file size limits in `palascribe_server.py`:
 
-1. **"whisper: command not found"**
-   ```bash
-   # Reinstall whisper
-   pip install --upgrade openai-whisper
-   
-   # Check PATH
-   echo $PATH
-   ```
-
-2. **FFmpeg not found**
-   ```bash
-   # Test FFmpeg
-   ffmpeg -version
-   
-   # Reinstall if needed (macOS)
-   brew reinstall ffmpeg
-   ```
-
-3. **Server won't start**
-   ```bash
-   # Check if port is in use
-   lsof -i :8765
-   
-   # Kill existing process if needed
-   kill -9 $(lsof -ti:8765)
-   ```
-
-4. **Out of memory errors**
-   - Use a smaller model (`small` or `base`)
-   - Enable preview mode for large files
-   - Close other applications
-
-### Preview Mode
-
-For large audio files, use preview mode:
-- Processes only the first 60 seconds
-- Faster processing and preview
-- Useful for testing and quick review
-- Enable via checkbox in project creation
-
-## Supported File Formats
-
-- **MP3** (.mp3) - Most common format
-- **WAV** (.wav) - High quality, uncompressed
-- **M4A** (.m4a) - Apple format
-- **FLAC** (.flac) - Lossless compression
-- **OGG** (.ogg) - Open source format
-
-Maximum recommended file size: 100MB (configurable in backend)
-For larger files, use preview mode or split into smaller segments.
-
-## Pali Dictionary
-
-The application includes a comprehensive Pali dictionary with:
-
-- **Core Buddhist concepts**: dukkha, nibbana, dhamma, sangha
-- **Meditation terms**: vipassana, samatha, jhana, mindfulness
-- **Philosophical terms**: anicca, anatta, sunyata
-- **Ethical concepts**: sila, ahimsa, metta, karuna
-- **Text references**: dhammapada, vinaya, sutta, abhidhamma
-
-Recognized Pali words are automatically highlighted in the transcription.
-
-## Keyboard Shortcuts
-
-- **Ctrl+N** (Cmd+N): Create new project
-- **Ctrl+S** (Cmd+S): Save draft in editor
-- **Escape**: Close modals
-
-## Browser Compatibility
-
-Requires a modern browser with support for:
-
-- ES6+ JavaScript features
-- Fetch API
-- Local Storage
-- File API
-- Blob/URL APIs
-
-Tested on:
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
-## File Structure
-
-```text
-audio-text-converter/
-├── index.html                   # Main application page
-├── launcher.html               # Auto-starting launcher
-├── start-whisper-server.sh     # Server startup script
-├── whisper-setup-guide.sh      # Whisper installation script
-├── whisper_server.py           # Local Whisper backend server
-├── css/
-│   └── styles.css              # Custom styles (Tailwind CSS)
-├── js/
-│   ├── config.js               # Configuration and constants
-│   ├── pali-dictionary.js      # Pali word dictionary and processor
-│   ├── audio-processor.js      # Audio transcription handling
-│   ├── project-manager.js      # Project data management
-│   ├── ui-controller-fixed.js  # User interface controller
-│   └── app.js                  # Main application entry point
-└── data/                       # Data storage directory (created automatically)
+```python
+# Maximum file size (500MB default)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 ```
 
-## Data Storage
+## 🗂️ Directory Structure
 
-- **Local Storage**: Projects, settings stored in browser
-- **Memory**: Audio files and generated documents (temporary)
-- **Downloads**: Generated transcription files
-
-⚠️ **Note**: Data is stored locally in the browser. Clearing browser data will reset the application.
-
-## Backend API Integration
-
-### Local Whisper Server
-
-PALAScribe communicates with a local Python backend running Whisper:
-
-```javascript
-// Example API call to local server
-const formData = new FormData();
-formData.append('audio', audioFile);
-formData.append('model', 'medium');
-formData.append('language', 'English');
-formData.append('preview', 'false');
-
-fetch('http://localhost:8765/process', {
-    method: 'POST',
-    body: formData
-});
+```
+PALAScribe/
+├── Frontend Files
+│   ├── index-server.html          # Main application interface
+│   └── js/                        # JavaScript modules
+│       ├── ui-controller-fixed.js # Main UI controller
+│       ├── project-manager-server.js # Project management
+│       ├── config.js              # Configuration
+│       └── utils.js               # Utilities
+├── Backend Files
+│   ├── palascribe_server.py       # Main Flask server
+│   ├── whisper_server.py          # Whisper AI integration
+│   └── palascribe.db              # SQLite database
+├── Startup Scripts
+│   ├── start-palascribe.sh        # Main launcher
+│   ├── start-whisper-server.sh    # Whisper server launcher
+│   └── auto-whisper.sh            # Automatic setup
+└── Storage
+    └── uploads/                   # Audio file storage
 ```
 
-### Server Endpoints
+## 🔍 Troubleshooting
 
-- **POST /process**: Transcribe audio file
-- **GET /status**: Check server health
-- **GET /models**: List available Whisper models
+### Common Issues
 
-### Mock API (Demo Mode)
+#### Issue: "Whisper backend not running"
+**Solution**: 
+```bash
+# Check if Whisper server is running
+curl http://localhost:8000/health
 
-When Whisper backend is not available, the app falls back to mock mode:
-
-- Simulates API delay (3 seconds)
-- Returns sample transcription with Pali words
-- No network requests made
-- Perfect for testing and development
-
-## Customization
-
-### Adding Pali Words
-
-```javascript
-// Add new words to the dictionary
-paliProcessor.addWord('newword', {
-    meaning: 'word definition',
-    category: 'category',
-    pronunciation: 'pronunciation guide'
-});
+# If not running, start it manually
+python whisper_server.py
 ```
 
-### Modifying UI Themes
+#### Issue: "Cannot connect to server"
+**Solution**:
+```bash
+# Check if Flask server is running
+curl http://localhost:5000/api/projects
 
-Edit `css/styles.css` to customize:
+# If not running, start it
+python palascribe_server.py
+```
 
-- Color schemes
-- Typography
-- Layout spacing
-- Component styling
+#### Issue: "Audio file upload fails"
+**Solutions**:
+1. Check file size (max 500MB by default)
+2. Verify audio format (MP3, WAV, M4A supported)
+3. Ensure FFmpeg is installed and accessible
 
-### Configuration Options
+#### Issue: "Transcription takes too long"
+**Solutions**:
+1. Use smaller Whisper model (tiny, base)
+2. Use Preview mode for testing
+3. Check system resources (CPU, memory)
 
-Edit `js/config.js` to modify:
+#### Issue: "Module not found" errors
+**Solution**:
+```bash
+# Ensure virtual environment is activated
+source palascribe-env/bin/activate
 
-- File size limits
-- Supported formats
-- UI timings
-- Error messages
-- Backend endpoints
+# Reinstall missing packages
+pip install -r requirements.txt
+```
 
-## Troubleshooting
+### Performance Optimization
 
-### Backend Issues
+#### For Better Speed:
+- Use smaller Whisper models (tiny, base)
+- Ensure adequate RAM (8GB+ recommended)
+- Close other CPU-intensive applications
+- Use SSD storage for better I/O performance
 
-1. **Backend server not starting**
-   - Check Python installation: `python --version`
-   - Verify Whisper installation: `whisper --help`
-   - Check port availability: `lsof -i :8765`
-   - Kill existing processes: `kill -9 $(lsof -ti:8765)`
+#### For Better Accuracy:
+- Use larger Whisper models (medium, large)
+- Ensure high-quality audio input
+- Use appropriate audio preprocessing
+- Test with Preview mode first
 
-2. **Transcription fails**
-   - Verify backend server is running on port 8765
-   - Check audio file format is supported
-   - Monitor server logs in terminal
-   - Try with a smaller audio file first
+### Debug Mode
 
-3. **Out of memory errors**
-   - Use a smaller Whisper model (`small` or `base`)
-   - Enable preview mode for large files
-   - Close other memory-intensive applications
-   - Consider splitting large files
+Enable debug logging:
 
-### Frontend Issues
+```bash
+# Set environment variables
+export FLASK_DEBUG=1
+export PALASCRIBE_DEBUG=1
 
-1. **Audio file won't upload**
-   - Check file format is supported
-   - Verify file isn't corrupted
-   - Try a different audio format
-   - Check browser console for errors
+# Start with verbose logging
+python palascribe_server.py --debug
+python whisper_server.py --verbose
+```
 
-2. **Projects not saving**
-   - Check browser local storage is enabled
-   - Clear browser cache and try again
-   - Ensure sufficient storage space
-   - Try private/incognito mode
+## 📊 System Requirements & Performance
 
-3. **Pali words not highlighted**
-   - Words must be in the dictionary
-   - Check spelling and diacritics
-   - Case-insensitive matching applies
-   - Review text in editor view
+### Minimum Requirements
+- **CPU**: 2-core processor
+- **RAM**: 4GB
+- **Storage**: 2GB free space
+- **Network**: Not required (runs locally)
 
-### Error Messages
+### Recommended Configuration
+- **CPU**: 4+ core processor (Intel i5/AMD Ryzen 5 or better)
+- **RAM**: 8GB+ (16GB for large files)
+- **Storage**: 10GB+ SSD storage
+- **GPU**: Optional (CUDA-compatible for faster processing)
 
-- **"Backend server not running"**: Start `whisper_server.py`
-- **"Failed to fetch"**: Check server connection and port
-- **"Unsupported audio format"**: Use MP3, WAV, M4A, FLAC, or OGG
-- **"Processing failed"**: Check server logs and file integrity
+### Performance Expectations
 
-## Development
+| Audio Length | Whisper Model | Expected Processing Time |
+|--------------|---------------|-------------------------|
+| 10 minutes   | tiny          | 30 seconds             |
+| 10 minutes   | base          | 1-2 minutes            |
+| 10 minutes   | small         | 2-3 minutes            |
+| 60 minutes   | base          | 5-10 minutes           |
+| 60 minutes   | medium        | 15-25 minutes          |
 
-### Local Development
+*Times may vary based on hardware and audio complexity*
 
-1. Clone or download the project
-2. Set up local Whisper backend (see setup instructions)
-3. Start the backend server: `python whisper_server.py`
-4. Open `index.html` in a web browser
-5. No build process required for frontend
+## 🤝 Contributing
 
-### Testing
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
 
-The application includes built-in error handling and logging:
+### Development Setup
 
-- Check browser console for detailed logs
-- Use demo mode for testing without backend
-- Test with various audio file formats and sizes
-- Monitor backend server logs
+```bash
+# Fork and clone the repository
+git clone https://github.com/yourusername/PALAScribe.git
 
-### Contributing
+# Create development branch
+git checkout -b feature/your-feature-name
 
-1. Test your changes thoroughly
-2. Ensure browser compatibility
-3. Update documentation if needed
-4. Follow existing code style
-5. Test both frontend and backend integration
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-## Security Considerations
+# Run tests
+python -m pytest tests/
 
-- **Local Processing**: All audio processing happens locally for privacy
-- **File Uploads**: Validate file types and sizes on both frontend and backend
-- **Data Storage**: Consider encryption for sensitive projects
-- **Network Requests**: Backend runs on localhost only
-- **Content Security**: Sanitize user input and file content
+# Submit pull request
+```
 
-## Performance Tips
+## 📄 License
 
-- **Large Files**: Use preview mode for files over 50MB
-- **Memory Usage**: Application cleans up resources automatically
-- **Storage**: Regularly export and clear old projects
-- **Processing**: Use appropriate Whisper model for your hardware
-- **Network**: Backend processing eliminates network dependency
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## License
+## 🙏 Acknowledgments
 
-This project is provided as-is for educational and development purposes.
+- [OpenAI Whisper](https://github.com/openai/whisper) for the speech recognition engine
+- [Flask](https://flask.palletsprojects.com/) for the web framework
+- [Tailwind CSS](https://tailwindcss.com/) for the styling framework
+- The Buddhist and Pali language communities for inspiration and guidance
 
-## Support
+## 📞 Support
 
-For issues and questions:
-
-1. Check the troubleshooting section
-2. Review browser console for errors
-3. Check backend server logs
-4. Ensure all requirements are met
-5. Test in demo mode first
+- **Documentation**: See additional docs in the repository
+- **Issues**: Report bugs via GitHub Issues
+- **Discussions**: Join community discussions on GitHub
+- **Email**: Contact the development team at [support@palascribe.org](mailto:support@palascribe.org)
 
 ---
 
-**Version**: 2.0.0  
-**Last Updated**: July 2025  
-**Compatibility**: Modern browsers with ES6+ support, Python 3.8+, Local Whisper
+**Made with ❤️ for the preservation and accessibility of dharma teachings**
