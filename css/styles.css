@@ -1042,3 +1042,12 @@ button#btn-approve-final:hover {
     overflow-y: auto !important;
     flex: 1 !important;
 }
+
+/* Higher z-index for cancel confirmation modal */
+.z-60 {
+    z-index: 60 !important;
+}
+
+.z-70 {
+    z-index: 70 !important;
+}

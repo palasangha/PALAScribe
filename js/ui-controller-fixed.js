@@ -649,6 +649,13 @@ class UIController {
     // Process project audio in background (non-blocking)
     async processProjectAudioBackground(projectId, audioFile, previewMode = false, projectName = '') {
         console.log('🚀 Starting background audio processing for project:', projectId);
+        
+        // Set the processing project ID for cancellation purposes
+        this.processingProjectId = projectId;
+        
+        // Show background processing UI
+        this.showBackgroundProcessing(`Processing ${projectName}...`);
+        
         try {
             // Process audio (this will use the background processing UI)
             await this.processProjectAudio(projectId, audioFile, previewMode);
@@ -692,6 +699,9 @@ class UIController {
                 // Processing was cancelled
                 this.showNotification('Processing cancelled', 'info', 3000);
             }
+        } finally {
+            // Clear the processing project ID when done
+            this.processingProjectId = null;
         }
     }
 
@@ -1016,14 +1026,66 @@ class UIController {
     }
 
     // Cancel current processing
-    cancelCurrentProcessing() {
+    // Cancel current processing
+    async cancelCurrentProcessing() {
         console.log('🛑 Cancelling current processing...');
         
+        try {
+            // Extract project ID from currentProcessId or use currentProject
+            let projectId = null;
+            
+            if (this.currentProcessId && this.currentProcessId.includes('process_')) {
+                // Try to extract project ID from background processing
+                // The processProjectAudioBackground method should set a proper process ID
+                if (this.processingProjectId) {
+                    projectId = this.processingProjectId;
+                }
+            } else if (this.currentProject && this.currentProject.id) {
+                projectId = this.currentProject.id;
+            }
+            
+            if (projectId) {
+                console.log(`🛑 Sending cancel request for project: ${projectId}`);
+                this.showNotification('Cancelling transcription...', 'info');
+                
+                console.log('🔄 Making fetch request to:', `/projects/${projectId}/cancel`);
+                
+                const response = await fetch(`/projects/${projectId}/cancel`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('📡 Fetch response received:', response);
+                console.log('📡 Response status:', response.status);
+                console.log('📡 Response ok:', response.ok);
+                console.log('📡 Response headers:', response.headers);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('✅ Server cancel response:', result);
+                    this.showNotification('Transcription cancelled successfully', 'info', 3000);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Server cancel failed:', response.status, errorText);
+                    this.showNotification(`Failed to cancel on server (${response.status}): ${errorText}`, 'error', 5000);
+                }
+            } else {
+                console.log('ℹ️ No active project to cancel on server');
+                this.showNotification('Stopping local processing...', 'info', 2000);
+            }
+        } catch (error) {
+            console.error('❌ Error cancelling on server:', error);
+            this.showNotification('Failed to cancel on server, but stopping UI', 'error', 3000);
+        }
+        
+        // Always clean up local state regardless of server response
         this.isProcessing = false;
         this.currentProcessId = null;
+        this.processingProjectId = null; // Clear the processing project ID
         
         this.hideBackgroundProcessing();
-        this.showNotification('Processing cancelled', 'info', 3000);
     }
 
     // Background processing UI methods

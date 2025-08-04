@@ -18,11 +18,15 @@ import sqlite3
 import uuid
 import shutil
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.parse
 from io import BytesIO
 from datetime import datetime
 import threading
+
+# Global variables for tracking active transcriptions
+active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
+transcription_lock = threading.Lock()
 
 # Pali corrections dictionary and function (moved from whisper_server.py)
 PALI_CORRECTIONS = {
@@ -591,6 +595,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/projects/') and self.path.endswith('/transcribe'):
             project_id = self.path.split('/')[-2]
             self.handle_transcribe_project(project_id)
+        elif self.path.startswith('/projects/') and self.path.endswith('/cancel'):
+            project_id = self.path.split('/')[-2]
+            self.handle_cancel_transcription(project_id)
         else:
             self.send_error(404, "Not Found")
     
@@ -913,11 +920,20 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 model=model,
                 language=language,
                 preview_mode=preview_mode,
-                preview_duration=preview_duration
+                preview_duration=preview_duration,
+                project_id=project_id
             )
             
             # Update project with results
             if result.get('success'):
+                # Check if the transcription was cancelled while we were processing
+                global active_transcriptions, transcription_lock
+                with transcription_lock:
+                    if project_id in active_transcriptions and active_transcriptions[project_id].get('cancelled'):
+                        print(f"🛑 Transcription was cancelled for project {project_id}, skipping result update")
+                        self.send_json_response({'success': False, 'error': 'Processing was cancelled'})
+                        return
+                
                 self.db_manager.update_project(project_id, {
                     'transcription': result.get('transcription', ''),
                     'formatted_text': result.get('formatted_text', ''),
@@ -927,16 +943,63 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 })
                 print(f"✅ Transcription completed for project {project_id}")
             else:
-                self.db_manager.update_project(project_id, {
-                    'status': 'Error',  # Use consistent error status
-                    'error_message': result.get('error', 'Unknown error')
-                })
-                print(f"❌ Transcription failed for project {project_id}")
+                # For failed transcriptions, also check if it was cancelled
+                if result.get('error') == 'Processing was cancelled':
+                    print(f"🛑 Transcription was cancelled for project {project_id}")
+                else:
+                    self.db_manager.update_project(project_id, {
+                        'status': 'Error',  # Use consistent error status
+                        'error_message': result.get('error', 'Unknown error')
+                    })
+                    print(f"❌ Transcription failed for project {project_id}")
             
             self.send_json_response(result)
             
         except Exception as e:
             print(f"❌ Transcription error: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_cancel_transcription(self, project_id):
+        """Cancel an active transcription"""
+        try:
+            print(f"🛑 Cancel request for project {project_id}")
+            
+            global active_transcriptions, transcription_lock
+            
+            with transcription_lock:
+                if project_id in active_transcriptions:
+                    transcription_info = active_transcriptions[project_id]
+                    process = transcription_info.get('process')
+                    
+                    if process and process.poll() is None:  # Process is still running
+                        print(f"🛑 Terminating transcription process for project {project_id}")
+                        process.terminate()
+                        
+                        # Wait a bit for graceful termination
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            print(f"🛑 Force killing transcription process for project {project_id}")
+                            process.kill()
+                    
+                    # Mark as cancelled and remove from active list
+                    transcription_info['cancelled'] = True
+                    del active_transcriptions[project_id]
+                    
+                    # Update project status in database
+                    self.db_manager.update_project(project_id, {
+                        'status': 'new',
+                        'updated_at': datetime.now().isoformat()
+                    })
+                    
+                    print(f"✅ Successfully cancelled transcription for project {project_id}")
+                    self.send_json_response({'success': True, 'message': 'Transcription cancelled'})
+                else:
+                    print(f"ℹ️ No active transcription found for project {project_id}")
+                    self.send_json_response({'success': True, 'message': 'No active transcription to cancel'})
+                    
+        except Exception as e:
+            print(f"❌ Cancel transcription error: {e}")
             self.send_error_response(500, str(e))
     
     def handle_get_audio(self, filename):
@@ -1098,7 +1161,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send_error_response(500, str(e))
 
-    def execute_whisper_command(self, audio_file_path, model="medium", language="English", preview_mode=False, preview_duration=60):
+    def execute_whisper_command(self, audio_file_path, model="medium", language="English", preview_mode=False, preview_duration=60, project_id=None):
         """Execute Whisper command and return results (adapted from whisper_server.py)"""
         
         # Ensure we're in the right directory
@@ -1156,26 +1219,86 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             print(f"⏰ Setting timeout to {timeout_seconds} seconds")
             
-            result = subprocess.run(
-                command, 
-                capture_output=True, 
-                text=True, 
-                check=False,  # Don't raise exception, we'll handle errors manually
-                cwd=project_dir,
-                timeout=timeout_seconds
+            # Use Popen for better process control and cancellation support
+            global active_transcriptions, transcription_lock
+            
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=project_dir
             )
+            
+            # Track the process if project_id is provided
+            if project_id:
+                with transcription_lock:
+                    active_transcriptions[project_id] = {
+                        'process': process,
+                        'start_time': start_time,
+                        'cancelled': False
+                    }
+                    print(f"📝 Tracking transcription process for project {project_id}")
+            
+            # Wait for process completion with timeout
+            try:
+                stdout, stderr = process.communicate(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                print(f"⏰ Process timed out after {timeout_seconds} seconds")
+                process.kill()
+                stdout, stderr = process.communicate()
+                
+                # Clean up tracking
+                if project_id and project_id in active_transcriptions:
+                    with transcription_lock:
+                        del active_transcriptions[project_id]
+                
+                return {
+                    'success': False,
+                    'error': f'Processing timed out after {timeout_seconds} seconds',
+                    'processing_time': time.time() - start_time
+                }
             
             end_time = time.time()
             processing_time = end_time - start_time
             
+            # Check if process was cancelled (return code -15 = SIGTERM)
+            if process.returncode == -15:
+                print(f"🛑 Process was terminated (SIGTERM) for project {project_id}")
+                # Clean up tracking if still exists
+                if project_id:
+                    with transcription_lock:
+                        if project_id in active_transcriptions:
+                            del active_transcriptions[project_id]
+                return {
+                    'success': False,
+                    'error': 'Processing was cancelled',
+                    'processing_time': processing_time
+                }
+            
+            # Check if process was cancelled via tracking
+            if project_id:
+                with transcription_lock:
+                    if project_id in active_transcriptions:
+                        if active_transcriptions[project_id].get('cancelled'):
+                            print(f"🛑 Process was cancelled for project {project_id}")
+                            del active_transcriptions[project_id]
+                            return {
+                                'success': False,
+                                'error': 'Processing was cancelled',
+                                'processing_time': processing_time
+                            }
+                        # Remove from tracking since it completed
+                        del active_transcriptions[project_id]
+            
             print(f"✅ Whisper processing completed in {processing_time:.1f} seconds")
-            print(f"🔍 Command return code: {result.returncode}")
+            print(f"🔍 Command return code: {process.returncode}")
             
             # Enhanced debugging - capture and display stdout/stderr
-            if result.stdout:
-                print(f"📤 Whisper stdout: {result.stdout[:500]}...")
-            if result.stderr:
-                print(f"📤 Whisper stderr: {result.stderr[:500]}...")
+            if stdout:
+                print(f"📤 Whisper stdout: {stdout[:500]}...")
+            if stderr:
+                print(f"📤 Whisper stderr: {stderr[:500]}...")
             
             # Find and read the generated text file
             audio_name = Path(processed_audio_path).stem
@@ -1341,10 +1464,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             if not transcription.strip():
                 error_msg = "No transcription generated by Whisper."
                 print(f"❌ {error_msg}")
-                if result.returncode != 0:
-                    print(f"❌ Whisper command failed with return code: {result.returncode}")
-                    if result.stderr:
-                        print(f"❌ Error details: {result.stderr}")
+                if process.returncode != 0:
+                    print(f"❌ Whisper command failed with return code: {process.returncode}")
+                    if stderr:
+                        print(f"❌ Error details: {stderr}")
                 return {"success": False, "error": error_msg}
             
             # Clean up trimmed audio if it was created
@@ -1441,7 +1564,7 @@ def main():
     
     # Create server
     handler_class = create_handler_with_db(db_manager)
-    server = HTTPServer(('localhost', port), handler_class)
+    server = ThreadingHTTPServer(('localhost', port), handler_class)
     
     print(f"✅ Server running on http://localhost:{port}")
     print("📊 Database initialized")
@@ -1453,6 +1576,8 @@ def main():
     print("   PUT  /projects/{id} - Update project")
     print("   DELETE /projects/{id} - Delete project")
     print("   POST /projects/{id}/audio - Upload audio")
+    print("   POST /projects/{id}/transcribe - Start transcription")
+    print("   POST /projects/{id}/cancel - Cancel transcription")
     print("   GET  /audio/{filename} - Get audio file")
     print("   POST /process - Whisper processing (legacy)")
     
