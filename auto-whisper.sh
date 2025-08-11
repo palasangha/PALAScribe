@@ -2,13 +2,13 @@
 # Auto-start Whisper Server Script
 # This script checks if the server is running and starts it if needed
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="/mnt/sda1/mango1_home/PALAScribe"
 SERVER_PORT=8765
 VENV_PATH="$PROJECT_DIR/whisper-env"
 SERVER_SCRIPT="$PROJECT_DIR/whisper_server.py"
 PID_FILE="$PROJECT_DIR/.whisper_server.pid"
 
-cd "$PROJECT_DIR" || exit 1
+#cd "$PROJECT_DIR" || exit 1
 
 # Function to check if server is running
 check_server_running() {

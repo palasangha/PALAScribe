@@ -15,7 +15,7 @@ def execute_whisper_command(audio_file_path, model="medium", language="English")
     """Execute Whisper command and return results"""
     
     # Ensure we're in the right directory
-    project_dir = "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+    project_dir = "~/PALAScribe"
     os.chdir(project_dir)
     
     # Construct the Whisper command

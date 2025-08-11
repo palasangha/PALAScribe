@@ -7,7 +7,7 @@
 # - Whisper audio transcription
 # - Pali Buddhist terminology correction
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="~/PALAScribe"
 SERVER_PORT=8765
 
 echo "🚀 Starting PALAScribe Consolidated Server..."

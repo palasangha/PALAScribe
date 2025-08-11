@@ -373,7 +373,7 @@ class WhisperRequestHandler(BaseHTTPRequestHandler):
         """Execute Whisper command and return results"""
         
         # Ensure we're in the right directory
-        project_dir = "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+        project_dir = "~/PALAScribe"
         os.chdir(project_dir)
         
         # Get file size for logging and time estimation
