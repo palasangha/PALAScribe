@@ -1,4 +1,4 @@
-# PALAScribe: Advanced Audio Transcription for Pali & Dharma Content
+# PALAScribe: Advanced Audio Transcription for Pali & Dhamma Content
 
 ## Overview
 
