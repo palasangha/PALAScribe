@@ -67,6 +67,10 @@ A web-based application for converting audio files to text with specialized Pali
 
 2. **Install Python Dependencies**
    ```bash
+   # Make Environment
+   python -m venv whisper-env
+   source whisper-env/bin/activate
+
    # Using requirements.txt (recommended)
    pip install -r requirements.txt
    

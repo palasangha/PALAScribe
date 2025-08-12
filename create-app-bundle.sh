@@ -1,7 +1,7 @@
 #!/bin/bash
 # Create a macOS .app bundle for PALAScribe
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="./"
 APP_NAME="Audio-Text-Converter"
 APP_DIR="$PROJECT_DIR/$APP_NAME.app"
 
@@ -38,7 +38,7 @@ cat > "$APP_DIR/Contents/MacOS/Audio-Text-Converter" << 'EOF'
 #!/bin/bash
 # PALAScribe Launcher
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="./"
 cd "$PROJECT_DIR"
 
 # Function to start backend

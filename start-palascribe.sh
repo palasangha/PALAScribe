@@ -7,7 +7,7 @@
 # - Whisper audio transcription
 # - Pali Buddhist terminology correction
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="./"
 SERVER_PORT=8765
 
 echo "🚀 Starting PALAScribe Consolidated Server..."
@@ -40,9 +40,9 @@ if lsof -Pi :$SERVER_PORT -sTCP:LISTEN -t >/dev/null ; then
         exit 1
     fi
 fi
-
+#for changes for palascribe server to listen in all ips
 echo "✅ Starting consolidated PALAScribe server..."
-echo "🎯 All services available on: http://localhost:$SERVER_PORT"
+echo "🎯 All services available on: http://0.0.0.0:$SERVER_PORT"
 echo ""
 echo "📊 Available endpoints:"
 echo "   - GET  /health - Health check"
@@ -51,7 +51,7 @@ echo "   - POST /projects - Create project"
 echo "   - POST /projects/{id}/transcribe - Transcribe audio"
 echo "   - POST /process - Direct Whisper processing (legacy)"
 echo ""
-echo "📱 Web Interface: http://localhost:$SERVER_PORT"
+echo "📱 Web Interface: http://0.0.0.0:$SERVER_PORT" 
 echo ""
 
 # Start the server
