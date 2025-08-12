@@ -1165,7 +1165,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         """Execute Whisper command and return results (adapted from whisper_server.py)"""
         
         # Ensure we're in the right directory
-        project_dir = "."
+        project_dir = "./"
         os.chdir(project_dir)
         
         # Get file size for logging and time estimation
