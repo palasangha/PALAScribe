@@ -342,7 +342,7 @@ def main():
         sys.exit(1)
     
     # Start HTTP server
-    server_address = ('localhost', 8765)
+    server_address = ('0.0.0.0', 8765)#for listening on all ip
     httpd = HTTPServer(server_address, WhisperRequestHandler)
     
     print(f"📡 Server running at http://{server_address[0]}:{server_address[1]}")
