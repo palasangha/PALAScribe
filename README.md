@@ -35,22 +35,9 @@ A web-based application for converting audio files to text with specialized Pali
 
 ## Quick Start
 
-### Prerequisites
+**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
 
-Before using PALAScribe, you need to set up local Whisper. Follow the setup guide below.
-
-### 1. Install Local Whisper
-
-**Option A: Automatic Setup (Recommended)**
-```bash
-# Run the setup script (macOS/Linux)
-chmod +x whisper-setup-guide.sh
-./whisper-setup-guide.sh
-
-# For Windows, see manual setup below
-```
-
-**Option B: Manual Setup**
+### Step 1: Install Dependencies
 
 1. **Install Python 3.8+**
    ```bash
@@ -59,16 +46,13 @@ chmod +x whisper-setup-guide.sh
    # Should be 3.8 or higher
    ```
 
-2. **Install Dependencies**
+2. **Install Python Dependencies**
    ```bash
-   # Option A: Using requirements.txt (recommended)
+   # Using requirements.txt (recommended)
    pip install -r requirements.txt
-
-   # Option B: Manual installation
+   
+   # Alternative: Manual installation
    pip install openai-whisper
-
-   # Option C: Install with additional dependencies
-   pip install openai-whisper[all]
    ```
 
 3. **Install FFmpeg** (required for audio processing)
@@ -88,36 +72,42 @@ chmod +x whisper-setup-guide.sh
    - Download from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
    - Add to system PATH
 
-4. **Test Whisper Installation**
+4. **Verify Installation**
    ```bash
-   # Test with a simple command
+   # Test Whisper
    whisper --help
    
-   # Download a model (optional - will download on first use)
-   whisper --model medium --language English test-audio.wav
+   # Test FFmpeg
+   ffmpeg -version
    ```
 
-### 2. Start the PALAScribe Server
+### Step 2: Start PALAScribe
 
-1. **Start the consolidated server**
+1. **Start the server**
    ```bash
-   # Option 1: Use the provided script (recommended)
+   # Using the startup script (recommended)
    ./start-palascribe.sh
    
-   # Option 2: Start manually
+   # Or start manually
    python3 palascribe_server.py
    ```
 
-2. **Verify the server is running**
-   - Server should start on `http://localhost:8765`
-   - All services (transcription + project management) run on this single port
-   - Check browser console or visit the URL to confirm
+2. **Verify server is running**
+   - Server starts on `http://localhost:8765`
+   - You should see startup messages in the terminal
+   - Visit `http://localhost:8765/health` to test
 
-### 3. Open PALAScribe Application
+### Step 3: Use the Application
 
-1. **Launch the application**
-   - Open `index.html` in a modern web browser
-   - Or use the launcher: open `launcher.html` for auto-backend startup
+1. **Open the web interface**
+   - Open `index.html` in your web browser
+   - Or use `launcher.html` for guided startup
+
+2. **Create your first project**
+   - Click "Start Audio Conversion"
+   - Enter a project name
+   - Upload your audio file
+   - Click "Create Project" to start transcription
 
 2. **Create Your First Project**
    - Click "Start Audio Conversion"
