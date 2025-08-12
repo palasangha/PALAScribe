@@ -23,7 +23,7 @@ import urllib.parse
 from io import BytesIO
 from datetime import datetime
 import threading
-
+import torch
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
@@ -1554,6 +1554,8 @@ def create_handler_with_db(db_manager):
     return handler
 
 def main():
+    print("Checking if CUDA available")
+    print(torch.cuda.is_available())
     """Start the PALAScribe multi-user server"""
     port = 8765
     

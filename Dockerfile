@@ -47,4 +47,10 @@ CMD ["python", "palascribe_server.py"]
 
 #5. sudo systemctl restart docker
 
+#6. Check Docker has aceess to GPU
+#   1. sudo vim /etc/nvidia-container-runtime/config.toml
+#   2. no-cgroups = false
+#   3. sudo systemctl restart docker
+#   4. docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+
 
