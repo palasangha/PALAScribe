@@ -1564,7 +1564,7 @@ def main():
     
     # Create server
     handler_class = create_handler_with_db(db_manager)
-    server = ThreadingHTTPServer(('0.0.0.0', port), handler_class)
+    server = ThreadingHTTPServer(('0.0.0.0', port), handler_class) #for listening on all interfaces
     
     print(f"✅ Server running on http://0.0.0.0:{port}")
     print("📊 Database initialized")
