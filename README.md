@@ -40,9 +40,28 @@ A web-based application for converting audio files to text with specialized Pali
 ### Step 1: Install Dependencies
 
 1. **Install Python 3.8+**
+   
+   **macOS:**
    ```bash
-   # Check Python version
-   python --version
+   # Using Homebrew (recommended)
+   brew install python3
+   
+   # Or download from python.org
+   ```
+   
+   **Ubuntu/Debian:**
+   ```bash
+   sudo apt update
+   sudo apt install python3 python3-pip
+   ```
+   
+   **Windows:**
+   - Download from [python.org](https://www.python.org/downloads/)
+   - Make sure to check "Add Python to PATH" during installation
+   
+   **Verify installation:**
+   ```bash
+   python3 --version
    # Should be 3.8 or higher
    ```
 
