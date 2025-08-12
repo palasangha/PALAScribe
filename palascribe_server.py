@@ -3,7 +3,6 @@
 PALAScribe Multi-User Server
 Provides HTTP API with database persistence for multi-user functionality
 """
-
 import sys
 import os
 import subprocess
@@ -23,10 +22,22 @@ import urllib.parse
 from io import BytesIO
 from datetime import datetime
 import threading
+from http.cookies import SimpleCookie
+from google_auth_oauthlib.flow import Flow
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 import torch
+
+
+# # For local development, allow insecure transport for OAuthlib
+# if "localhost" in REDIRECT_URI or "127.0.0.1" in REDIRECT_URI:
+#     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+#     print("✅ Development mode: Allowing insecure transport for OAuth.")
+
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
+session_store = {} # Simple in-memory session store {session_id: user_data}
 
 # Pali corrections dictionary and function (moved from whisper_server.py)
 PALI_CORRECTIONS = {
@@ -253,6 +264,7 @@ class DatabaseManager:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
+                user_id TEXT,
                 name TEXT NOT NULL,
                 assigned_to TEXT,
                 start_date TEXT,
@@ -269,7 +281,8 @@ class DatabaseManager:
                 is_preview BOOLEAN DEFAULT 0,
                 error_message TEXT,
                 created TEXT NOT NULL,
-                updated TEXT NOT NULL
+                updated TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
         
@@ -288,6 +301,18 @@ class DatabaseManager:
             )
         ''')
         
+        # Users table for authentication
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                google_id TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                name TEXT,
+                picture_url TEXT,
+                created TEXT NOT NULL
+            )
+        ''')
+        
         # Create uploads directory
         uploads_dir = Path("uploads")
         uploads_dir.mkdir(exist_ok=True)
@@ -296,7 +321,7 @@ class DatabaseManager:
         conn.close()
         print("✅ Database initialized")
     
-    def create_project(self, name, assigned_to=""):
+    def create_project(self, name, user_id, assigned_to=""):
         """Create a new project with unique name handling"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -308,9 +333,9 @@ class DatabaseManager:
         now = datetime.now().isoformat()
         
         cursor.execute('''
-            INSERT INTO projects (id, name, assigned_to, start_date, status, created, updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (project_id, unique_name, assigned_to, now, 'new', now, now))
+            INSERT INTO projects (id, user_id, name, assigned_to, start_date, status, created, updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (project_id, user_id, unique_name, assigned_to, now, 'new', now, now))
         
         conn.commit()
         
@@ -348,12 +373,12 @@ class DatabaseManager:
             return self._row_to_project(row)
         return None
     
-    def get_all_projects(self):
-        """Get all projects"""
+    def get_all_projects(self, user_id):
+        """Get all projects for a specific user"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('SELECT * FROM projects ORDER BY created DESC')
+        cursor.execute('SELECT * FROM projects WHERE user_id = ? ORDER BY created DESC', (user_id,))
         rows = cursor.fetchall()
         conn.close()
         
@@ -450,12 +475,45 @@ class DatabaseManager:
         print(f"✅ Saved audio file: {filename} for project {project_id}")
         return str(file_path)
     
+    def get_user_by_google_id(self, google_id):
+        """Get user by their Google ID"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE google_id = ?', (google_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            columns = ['id', 'google_id', 'email', 'name', 'picture_url', 'created']
+            return dict(zip(columns, row))
+        return None
+
+    def create_user(self, google_id, email, name, picture_url):
+        """Create a new user"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        user_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        
+        cursor.execute('''
+            INSERT INTO users (id, google_id, email, name, picture_url, created)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, google_id, email, name, picture_url, now))
+        
+        conn.commit()
+        user = self.get_user_by_google_id(google_id)
+        conn.close()
+        
+        print(f"✅ Created user: {name} (ID: {user_id})")
+        return user
+
     def _row_to_project(self, row):
         """Convert database row to project dictionary"""
-        columns = ['id', 'name', 'assigned_to', 'start_date', 'end_date', 'status',
-                  'audio_file_name', 'audio_file_path', 'transcription', 'formatted_text',
-                  'edited_text', 'rich_content', 'word_count', 'processing_time',
-                  'is_preview', 'error_message', 'created', 'updated']
+        columns = [
+            'id', 'user_id', 'name', 'assigned_to', 'start_date', 'end_date', 
+            'status', 'audio_file_name', 'audio_file_path', 'transcription', 
+            'formatted_text', 'edited_text', 'rich_content', 'word_count', 
+            'processing_time', 'is_preview', 'error_message', 'created', 'updated'
+        ]
         
         project = dict(zip(columns, row))
         
@@ -506,6 +564,41 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         self.db_manager = db_manager
         super().__init__(*args, **kwargs)
     
+    def get_current_user(self):
+        """Get current user from session cookie"""
+        cookie_header = self.headers.get('Cookie')
+        if not cookie_header:
+            return None
+        
+        try:
+            cookie = SimpleCookie()
+            cookie.load(cookie_header)
+            
+            if 'session_id' in cookie:
+                session_id = cookie['session_id'].value
+                return session_store.get(session_id)
+        except Exception as e:
+            print(f"Error parsing cookie: {e}")
+        
+        return None
+
+    def send_json_response(self, data, status=200):
+        """Send JSON response with CORS headers"""
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        
+        response = json.dumps(data, indent=2)
+        self.wfile.write(response.encode('utf-8'))
+    
+    def send_error_response(self, status, message):
+        """Send error response"""
+        self.send_json_response({
+            "success": False,
+            "error": message
+        }, status=status)
+
     def do_OPTIONS(self):
         """Handle CORS preflight requests"""
         self.send_response(200)
@@ -524,6 +617,12 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/projects/'):
             project_id = self.path.split('/')[-1]
             self.handle_get_project(project_id)
+        elif self.path == '/api/me':
+            self.handle_get_current_user()
+        elif self.path == '/auth/google':
+            self.handle_google_login()
+        elif self.path.startswith('/auth/google/callback'):
+            self.handle_google_callback()
         elif self.path.startswith('/audio/'):
             filename = self.path.split('/')[-1]
             self.handle_get_audio(filename)
@@ -582,7 +681,119 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"❌ Error serving static file {self.path}: {e}")
             self.send_error(500, f"Internal server error: {str(e)}")
     
+    def handle_get_current_user(self):
+        """Get the currently authenticated user from session"""
+        user = self.get_current_user()
+        if user:
+            print(f"👤 User authenticated: {user.get('name')}")
+            self.send_json_response({"user": user})
+        else:
+            print("👤 No authenticated user found")
+            self.send_json_response({"user": None})
     
+    def handle_google_login(self):
+        """Redirect user to Google for authentication"""
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            self.send_error_response(500, "Google Auth is not configured on the server.")
+            return
+
+        try:
+            # Create a flow instance to manage the OAuth 2.0 Authorization Grant Flow
+            flow = Flow.from_client_config(
+                client_config={
+                    "web": {
+                        "client_id": GOOGLE_CLIENT_ID,
+                        "client_secret": GOOGLE_CLIENT_SECRET,
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "redirect_uris": [REDIRECT_URI],
+                    }
+                },
+                scopes=[
+                    "https://www.googleapis.com/auth/userinfo.profile",
+                    "https://www.googleapis.com/auth/userinfo.email",
+                    "openid"
+                ],
+                redirect_uri=REDIRECT_URI
+            )
+
+            authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+            
+            self.send_response(302)
+            self.send_header('Location', authorization_url)
+            self.end_headers()
+        except Exception as e:
+            self.send_error_response(500, f"Error during Google login: {e}")
+    
+    def handle_google_callback(self):
+        """Handle the callback from Google after authentication"""
+        try:
+            # Recreate the flow instance to process the callback
+            flow = Flow.from_client_config(
+                client_config={
+                    "web": {
+                        "client_id": GOOGLE_CLIENT_ID,
+                        "client_secret": GOOGLE_CLIENT_SECRET,
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": [REDIRECT_URI],
+                    }
+                },
+                scopes=[
+                    "https://www.googleapis.com/auth/userinfo.profile",
+                    "https://www.googleapis.com/auth/userinfo.email",
+                    "openid"
+                ],
+                redirect_uri=REDIRECT_URI
+            )
+
+            # Use the full URL from the request to fetch the token
+            # Note: This assumes the server is running on http. For production, this should be https.
+            full_redirect_url = f"http://{self.headers['Host']}{self.path}"
+            flow.fetch_token(authorization_response=full_redirect_url)
+
+            credentials = flow.credentials
+            
+            # Verify the ID token to get user info securely
+            id_info = id_token.verify_oauth2_token(
+                id_token=credentials.id_token,
+                request=google_requests.Request(),
+                audience=GOOGLE_CLIENT_ID
+            )
+
+            google_id = id_info.get('sub')
+            email = id_info.get('email')
+            name = id_info.get('name')
+            picture_url = id_info.get('picture')
+
+            # Check if user exists in our database, or create a new one
+            user = self.db_manager.get_user_by_google_id(google_id)
+            if not user:
+                user = self.db_manager.create_user(google_id, email, name, picture_url)
+
+            # Create a session for the user
+            session_id = str(uuid.uuid4())
+            session_store[session_id] = user
+
+            # Set a session cookie and redirect to the main application page
+            cookie = SimpleCookie()
+            cookie['session_id'] = session_id
+            cookie['session_id']['path'] = '/'
+            cookie['session_id']['httponly'] = True
+            # For production, you would also set 'secure' = True and a 'max-age'
+
+            self.send_response(302)
+            self.send_header('Location', '/')
+            self.send_header('Set-Cookie', cookie.output(header='').strip())
+            self.end_headers()
+
+        except Exception as e:
+            print(f"❌ Google callback error: {e}")
+            import traceback
+            traceback.print_exc()
+            self.send_error_response(500, f"Authentication failed: {e}")
+
     def do_POST(self):
         """Handle POST requests"""
         if self.path == '/process':
@@ -598,6 +809,32 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/projects/') and self.path.endswith('/cancel'):
             project_id = self.path.split('/')[-2]
             self.handle_cancel_transcription(project_id)
+        elif self.path == '/logout':
+            self.handle_logout()
+        else:
+            self.send_error(404, "Not Found")
+    
+    def handle_logout(self):
+        """Log out the user by clearing the session"""
+        cookie_header = self.headers.get('Cookie')
+        if cookie_header:
+            cookie = SimpleCookie()
+            cookie.load(cookie_header)
+            if 'session_id' in cookie:
+                session_id = cookie['session_id'].value
+                if session_id in session_store:
+                    del session_store[session_id]
+                    print(f"✅ Logged out session: {session_id}")
+
+            # Send response to clear the cookie on the client side by expiring it
+            cookie = SimpleCookie()
+            cookie['session_id'] = ''
+            cookie['session_id']['path'] = '/'
+            cookie['session_id']['expires'] = 'Thu, 01 Jan 1970 00:00:00 GMT'
+
+            self.send_json_response({"message": "Logged out successfully"})
+        elif self.path == '/logout':
+            self.handle_logout()
         else:
             self.send_error(404, "Not Found")
     
@@ -681,14 +918,22 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_get_projects(self):
         """Get all projects"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
-            projects = self.db_manager.get_all_projects()
+            projects = self.db_manager.get_all_projects(user['id'])
             self.send_json_response({"projects": projects})
         except Exception as e:
             self.send_error_response(500, str(e))
     
     def handle_get_project(self, project_id):
         """Get specific project"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
             print(f"🔍 Getting project: {project_id}")
             project = self.db_manager.get_project(project_id)
@@ -696,6 +941,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 print(f"✅ Found project: {project.get('name', 'Unnamed')}")
                 print(f"📋 Project audio data: audioFilePath={project.get('audioFilePath')}, audioUrl={project.get('audioUrl')}")
                 self.send_json_response(project)
+            elif project['user_id'] != user['id']:
+                print(f"❌ Access denied for project {project_id} by user {user['id']}")
+                self.send_error_response(403, "Access denied")
             else:
                 print(f"❌ Project {project_id} not found")
                 self.send_error_response(404, "Project not found")
@@ -705,6 +953,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_create_project(self):
         """Create new project"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -717,7 +969,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 self.send_error_response(400, "Project name is required")
                 return
             
-            project = self.db_manager.create_project(name, assigned_to)
+            project = self.db_manager.create_project(name, user['id'], assigned_to)
             self.send_json_response(project, status=201)
             
         except Exception as e:
@@ -725,6 +977,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_update_project(self, project_id):
         """Update existing project"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -755,6 +1011,12 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             print(f"🔄 Updating project {project_id} with fields: {list(converted_data.keys())}")
             
+            # Verify ownership
+            project = self.db_manager.get_project(project_id)
+            if not project or project['user_id'] != user['id']:
+                self.send_error_response(403, "Access denied")
+                return
+
             self.db_manager.update_project(project_id, converted_data)
             
             # Return updated project
@@ -770,10 +1032,14 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_delete_project(self, project_id):
         """Delete project"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
             # Check if project exists
             project = self.db_manager.get_project(project_id)
-            if not project:
+            if not project or project['user_id'] != user['id']:
                 self.send_error_response(404, "Project not found")
                 return
             
@@ -785,6 +1051,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_upload_audio(self, project_id):
         """Handle audio file upload for project"""
+        user = self.get_current_user()
+        if not user:
+            self.send_error_response(401, "Authentication required")
+            return
         try:
             # Check if project exists
             project = self.db_manager.get_project(project_id)

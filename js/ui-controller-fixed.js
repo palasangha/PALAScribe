@@ -51,11 +51,9 @@ class UIController {
             this.bindEvents();
             console.log('✅ Events bound');
             
-            this.showView('dashboard');
-            console.log('✅ Initial view shown (dashboard)');
-            
-            this.refreshProjectsList();
-            console.log('✅ Projects list refreshed');
+            // Authentication will handle the initial view and project list refresh
+            this.initializeAuth();
+            console.log('🔐 Auth initialized');
             
             this.initTableSorting();
             console.log('✅ Table sorting initialized');
@@ -84,6 +82,86 @@ class UIController {
         } else {
             // Just check backend status without auto-starting
             setTimeout(() => this.checkAndUpdateBackendStatus(), 1000);
+        }
+    }
+
+    // --- Authentication Methods ---
+
+    async initializeAuth() {
+        try {
+            const user = await this.checkUserStatus();
+            if (user) {
+                this.renderAuthenticatedState(user);
+                this.showView('dashboard');
+                await this.refreshProjectsList(); // Refresh projects for the logged-in user
+            } else {
+                this.renderGuestState();
+                this.showLoginView();
+            }
+        } catch (error) {
+            console.error('Authentication check failed:', error);
+            this.renderGuestState();
+            this.showLoginView();
+        }
+    }
+
+    async checkUserStatus() {
+        try {
+            const response = await fetch(`${this.projectManager.apiBaseUrl}/api/me`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.user) {
+                    console.log('👤 User is authenticated:', data.user.name);
+                    return data.user;
+                }
+            }
+            console.log('👤 User is not authenticated.');
+            return null;
+        } catch (error) {
+            console.warn('Could not check user status, assuming logged out.', error);
+            return null;
+        }
+    }
+
+    renderAuthenticatedState(user) {
+        const authContainer = document.getElementById('auth-container');
+        if (!authContainer) return;
+
+        authContainer.innerHTML = `
+            <div class="flex items-center space-x-3">
+                <img src="${user.picture_url}" alt="${user.name}" class="w-8 h-8 rounded-full border-2 border-white">
+                <span class="text-white text-sm font-medium">${this.escapeHtml(user.name)}</span>
+                <button id="btn-logout" class="text-blue-200 hover:text-white text-sm underline">Logout</button>
+            </div>
+        `;
+    }
+
+    renderGuestState() {
+        const authContainer = document.getElementById('auth-container');
+        if (!authContainer) return;
+
+        authContainer.innerHTML = `
+            <button id="btn-login" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition-colors">
+                Login with Google
+            </button>
+        `;
+    }
+
+    showLoginView() {
+        this.showView('login');
+    }
+
+    handleLogin() {
+        window.location.href = `${this.projectManager.apiBaseUrl}/auth/google`;
+    }
+
+    async handleLogout() {
+        try {
+            await fetch(`${this.projectManager.apiBaseUrl}/logout`, { method: 'POST' });
+            window.location.reload(); // Easiest way to reset state
+        } catch (error) {
+            console.error('Logout failed:', error);
+            this.showErrorMessage('Logout failed. Please try again.');
         }
     }
 
@@ -184,7 +262,10 @@ class UIController {
             viewProjects: document.getElementById('view-projects'),
             viewCreate: document.getElementById('view-create'),
             viewLocal: document.getElementById('view-local'),
-            viewReview: document.getElementById('view-review')
+            viewReview: document.getElementById('view-review'),
+            viewLogin: document.getElementById('view-login'),
+            authContainer: document.getElementById('auth-container'),
+            mainContent: document.querySelector('main')
         };
 
         // Debug: Check if critical elements are found
@@ -207,6 +288,15 @@ class UIController {
 
     // Bind event listeners
     bindEvents() {
+        // Delegated event listeners for auth buttons
+        document.body.addEventListener('click', (e) => {
+            if (e.target.id === 'btn-login' || e.target.id === 'btn-main-login') {
+                this.handleLogin();
+            } else if (e.target.id === 'btn-logout') {
+                this.handleLogout();
+            }
+        });
+
         // Dashboard navigation buttons
         if (this.elements.btnStartConversion) {
             this.elements.btnStartConversion.addEventListener('click', () => {
@@ -542,6 +632,10 @@ class UIController {
         switch (viewName) {
             case 'dashboard':
                 if (this.elements.viewDashboard) this.elements.viewDashboard.classList.remove('hidden');
+                break;
+                
+            case 'login':
+                if (this.elements.viewLogin) this.elements.viewLogin.classList.remove('hidden');
                 break;
                 
             case 'ready-review':

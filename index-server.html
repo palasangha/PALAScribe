@@ -28,6 +28,9 @@
                         <span id="processing-status-text">Processing...</span>
                         <button id="btn-cancel-processing" class="ml-2 text-red-300 hover:text-red-100 text-xs underline">Cancel</button>
                     </div>
+                    <div id="auth-container">
+                        <!-- Auth state will be rendered here by JavaScript -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -130,6 +133,17 @@
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Login View -->
+        <div id="view-login" class="view-content hidden">
+            <div class="text-center py-24">
+                <h2 class="text-3xl font-bold text-gray-800 mb-4">Welcome to PALAScribe</h2>
+                <p class="text-gray-600 mb-8">Please log in with your Google account to manage your transcription projects.</p>
+                <button id="btn-main-login" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold text-lg transition-colors">
+                    Login with Google
+                </button>
+            </div>
+        </div>
         
         <!-- Dashboard View -->
         <div id="view-dashboard" class="view-content">
