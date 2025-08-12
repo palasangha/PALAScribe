@@ -69,5 +69,6 @@ if __name__ == "__main__":
             #stop_server()
             start_server()
         
-        time.sleep(30)
+        time.sleep(60*10)  # Sleep for 10 minutes before checking again
+        print("Checking for updates again...")
 
