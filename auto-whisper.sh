@@ -2,7 +2,7 @@
 # Auto-start Whisper Server Script
 # This script checks if the server is running and starts it if needed
 
-PROJECT_DIR="/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+PROJECT_DIR="./"
 SERVER_PORT=8765
 VENV_PATH="$PROJECT_DIR/whisper-env"
 SERVER_SCRIPT="$PROJECT_DIR/whisper_server.py"
@@ -12,7 +12,7 @@ cd "$PROJECT_DIR" || exit 1
 
 # Function to check if server is running
 check_server_running() {
-    curl -s http://localhost:$SERVER_PORT/health > /dev/null 2>&1
+    curl -s http://0.0.0.0:$SERVER_PORT/health > /dev/null 2>&1
     return $?
 }
 
@@ -83,7 +83,7 @@ start_server() {
         if check_server_running; then
             echo "✅ Whisper server started successfully (PID: $server_pid)"
             echo "📝 Logs: $PROJECT_DIR/whisper_server.log"
-            echo "🌐 Health check: http://localhost:$SERVER_PORT/health"
+            echo "🌐 Health check: http://0.0.0.0:$SERVER_PORT/health"
             return 0
         fi
         echo "⏳ Attempt $attempt/$max_attempts..."

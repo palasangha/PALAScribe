@@ -1165,7 +1165,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         """Execute Whisper command and return results (adapted from whisper_server.py)"""
         
         # Ensure we're in the right directory
-        project_dir = "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
+        project_dir = "./"
         os.chdir(project_dir)
         
         # Get file size for logging and time estimation
@@ -1564,9 +1564,9 @@ def main():
     
     # Create server
     handler_class = create_handler_with_db(db_manager)
-    server = ThreadingHTTPServer(('localhost', port), handler_class)
+    server = ThreadingHTTPServer(('0.0.0.0', port), handler_class) #for listening on all interfaces
     
-    print(f"✅ Server running on http://localhost:{port}")
+    print(f"✅ Server running on http://0.0.0.0:{port}")
     print("📊 Database initialized")
     print("🎯 API Endpoints:")
     print("   GET  /health - Health check")
