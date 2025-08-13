@@ -173,7 +173,7 @@
             
             launchApplicationDemo() {
                 // Open the main application in demo mode
-                window.open('index.html', '_blank');
+                window.open('index-server.html', '_blank');
                 this.updateStatus('purple', 'Demo mode launched! ✅', 100);
                 const btnLaunchDemo = document.getElementById('btn-launch-demo');
                 btnLaunchDemo.textContent = '✅ Demo Launched';
@@ -182,7 +182,7 @@
             
             launchApplication() {
                 // Open the main application with autostart parameter
-                window.open('index.html?autostart=true', '_blank');
+                window.open('index-server.html?autostart=true', '_blank');
                 this.updateStatus('green', 'Application launched! ✅', 100);
                 this.btnLaunch.textContent = '✅ Launched';
                 this.btnLaunch.disabled = true;

@@ -15,47 +15,29 @@ A web-based application for converting audio files to text with specialized Pali
 - Special formatting for recognized words
 - Extensive built-in Pali dictionary
 
-📊 **Multi-User Project Management**
-- Create and manage transcription projects with database persistence
+- Complete review workflow
+
 - Track project status through workflow stages
 - Search and filter projects
 - User isolation and data persistence across server restarts
 
-📄 **Document Generation**
+- SQLite database for data persistence
 - Generate DOCX files from transcriptions
 - Download generated documents
 - Upload reviewed documents
 - Complete review workflow
 
-🏗️ **Consolidated Architecture**
-- Single server handles all functionality (transcription + project management)
-- SQLite database for data persistence
-- RESTful API for all operations
-- No port conflicts or multiple server management
-
 ## Quick Start
 
-**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
-
+**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index-server.html`
+- RESTful API for all operations
 ### Step 1: Install Dependencies
-
-1. **Install Python 3.8+**
-   
-   **macOS:**
-   ```bash
-   # Using Homebrew (recommended)
-   brew install python3
-   
-   # Or download from python.org
    ```
-   
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt update
+## Quick Start
    sudo apt install python3 python3-pip
-   ```
+**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index-server.html`
    
-   **Windows:**
+### Step 1: Install Dependencies
    - Download from [python.org](https://www.python.org/downloads/)
    - Make sure to check "Add Python to PATH" during installation
    
@@ -75,21 +57,26 @@ A web-based application for converting audio files to text with specialized Pali
    pip install -r requirements.txt
    
    # Alternative: Manual installation
-   pip install openai-whisper
+   Create and activate a virtual environment first.
    ```
-
+   
 3. **Install FFmpeg** (required for audio processing)
    
    **macOS (using Homebrew):**
    ```bash
    brew install ffmpeg
+
+2. **Install Python Dependencies**
    ```
-   
+   # Make Environment
    **Ubuntu/Debian:**
    ```bash
    sudo apt update
    sudo apt install ffmpeg
    ```
+   
+   # Alternative: Manual installation
+   pip install openai-whisper
    
    **Windows:**
    - Download from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
@@ -111,27 +98,40 @@ A web-based application for converting audio files to text with specialized Pali
    # Using the startup script (recommended)
    ./start-palascribe.sh
    
+   # Test Whisper
+   - Server starts on `http://localhost:8765`
+   
+   # Test FFmpeg
+   ffmpeg -version
+
+   - Open `index-server.html` in your web browser
+### Step 3: Start PALAScribe
+
+
+2. **Create your first project**
    # Or start manually
    python3 palascribe_server.py
-   ```
-
+   - Monitor progress in the notification area
+   This step is **required** for the server to start and for user login to function.
+   - Navigate to **`http://localhost:8765`** in your web browser.
+   - Navigate to "Ready for Review" to see completed transcriptions
 2. **Verify server is running**
    - Server starts on `http://localhost:8765`
-   - You should see startup messages in the terminal
+
    - Visit `http://localhost:8765/health` to test
 
 ### Step 3: Use the Application
 
 1. **Open the web interface**
-   - Open `index.html` in your web browser
+   - Open `index-server.html` in your web browser
    - Or use `launcher.html` for guided startup
 
 2. **Create your first project**
-   - Click "Start Audio Conversion"
+- **NEEDS_REVIEW**: Transcription complete, ready for review and editing
    - Enter a project name
    - Upload your audio file
    - Click "Create Project" to start transcription
-
+## Local Whisper Configuration
 2. **Create Your First Project**
    - Click "Start Audio Conversion"
    - Enter a project name
@@ -143,31 +143,11 @@ A web-based application for converting audio files to text with specialized Pali
    - Click "Create Project" to start transcription
    - Monitor progress in the notification area
 
-4. **Review and Approve**
+
    - Navigate to "Ready for Review" to see completed transcriptions
    - Edit and format the text using the rich text editor
    - Use "Approve Final" to mark as complete
    - Download the final transcription
-
-## Project Status Workflow
-
-PALAScribe uses a streamlined status-based workflow:
-
-```
-NEW → PROCESSING → NEEDS_REVIEW → APPROVED
-```
-
-- **NEW**: Project created, ready for audio upload
-- **PROCESSING**: Audio being transcribed by local Whisper
-- **NEEDS_REVIEW**: Transcription complete, ready for review and editing
-- **APPROVED**: Final transcription approved and downloadable
-
-## Local Whisper Configuration
-
-### Whisper Models
-
-PALAScribe uses the `medium` model by default for balanced accuracy and speed:
-
 - **tiny**: Fastest, least accurate (~1GB VRAM)
 - **base**: Fast, decent accuracy (~1GB VRAM)
 - **small**: Good balance (~2GB VRAM)
@@ -221,144 +201,48 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
    - Use a smaller model (`small` or `base`)
    - Enable preview mode for large files
    - Close other applications
+   
 
-### Preview Mode
-
-For large audio files, use preview mode:
-- Processes only the first 60 seconds
-- Faster processing and preview
-- Useful for testing and quick review
-- Enable via checkbox in project creation
 
 ## Supported File Formats
 
 - **MP3** (.mp3) - Most common format
 - **WAV** (.wav) - High quality, uncompressed
 - **M4A** (.m4a) - Apple format
-- **FLAC** (.flac) - Lossless compression
-- **OGG** (.ogg) - Open source format
-
-Maximum recommended file size: 100MB (configurable in backend)
-For larger files, use preview mode or split into smaller segments.
-
-## Pali Dictionary
-
-The application includes a comprehensive Pali dictionary with:
-
-- **Core Buddhist concepts**: dukkha, nibbana, dhamma, sangha
-- **Meditation terms**: vipassana, samatha, jhana, mindfulness
-- **Philosophical terms**: anicca, anatta, sunyata
-- **Ethical concepts**: sila, ahimsa, metta, karuna
-- **Text references**: dhammapada, vinaya, sutta, abhidhamma
-
-Recognized Pali words are automatically highlighted in the transcription.
 
 ## Keyboard Shortcuts
 
-- **Ctrl+N** (Cmd+N): Create new project
-- **Ctrl+S** (Cmd+S): Save draft in editor
-- **Escape**: Close modals
-
-## Browser Compatibility
-
-Requires a modern browser with support for:
-
-- ES6+ JavaScript features
-- Fetch API
-- Local Storage
-- File API
-- Blob/URL APIs
-
-Tested on:
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
 
 ## File Structure
 
 ```text
-audio-text-converter/
-├── index.html                   # Main application page
-├── launcher.html               # Auto-starting launcher
-├── start-whisper-server.sh     # Server startup script
-├── whisper-setup-guide.sh      # Whisper installation script
-├── whisper_server.py           # Local Whisper backend server
-├── css/
-│   └── styles.css              # Custom styles (Tailwind CSS)
-├── js/
-│   ├── config.js               # Configuration and constants
-│   ├── pali-dictionary.js      # Pali word dictionary and processor
-│   ├── audio-processor.js      # Audio transcription handling
-│   ├── project-manager.js      # Project data management
-│   ├── ui-controller-fixed.js  # User interface controller
-│   └── app.js                  # Main application entry point
-└── data/                       # Data storage directory (created automatically)
+PALAScribe/
+├── index-server.html            # Main application interface
+├── palascribe_server.py         # Consolidated backend server
+└── sessions/                    # Stored session files (auto-created)
 ```
 
 ## Data Storage
 
-- **Local Storage**: Projects, settings stored in browser
-- **Memory**: Audio files and generated documents (temporary)
 - **Downloads**: Generated transcription files
-
-⚠️ **Note**: Data is stored locally in the browser. Clearing browser data will reset the application.
-
-## Backend API Integration
-
-### Local Whisper Server
-
-PALAScribe communicates with a local Python backend running Whisper:
-
-```javascript
-// Example API call to local server
-const formData = new FormData();
-formData.append('audio', audioFile);
-formData.append('model', 'medium');
-formData.append('language', 'English');
 formData.append('preview', 'false');
 
-fetch('http://localhost:8765/process', {
-    method: 'POST',
-    body: formData
 });
-```
-
-### Server Endpoints
-
-- **POST /process**: Transcribe audio file
-- **GET /status**: Check server health
-- **GET /models**: List available Whisper models
-
-### Mock API (Demo Mode)
-
-When Whisper backend is not available, the app falls back to mock mode:
-
-- Simulates API delay (3 seconds)
-- Returns sample transcription with Pali words
-- No network requests made
-- Perfect for testing and development
-
 ## Customization
 
 ### Adding Pali Words
-
-```javascript
-// Add new words to the dictionary
-paliProcessor.addWord('newword', {
-    meaning: 'word definition',
-    category: 'category',
+PALAScribe/
+├── index-server.html            # Main application interface
+├── palascribe_server.py         # Consolidated backend server
+├── palascribe.db                # SQLite database (auto-created)
+├── requirements.txt             # Python dependencies
+├── .env.example                 # Environment variable template
     pronunciation: 'pronunciation guide'
-});
+│   └── styles.css               # Custom styles
 ```
-
-### Modifying UI Themes
-
-Edit `css/styles.css` to customize:
-
-- Color schemes
-- Typography
+│   └── ui-controller-fixed.js   # Main UI controller
+├── uploads/                     # Stored audio files (auto-created)
+└── sessions/                    # Stored session files (auto-created)
 - Layout spacing
 - Component styling
 
@@ -428,7 +312,7 @@ Edit `js/config.js` to modify:
 1. Clone or download the project
 2. Set up local Whisper backend (see setup instructions)
 3. Start the backend server: `python whisper_server.py`
-4. Open `index.html` in a web browser
+4. Open `index-server.html` in a web browser
 5. No build process required for frontend
 
 ### Testing
