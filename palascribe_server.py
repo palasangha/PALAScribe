@@ -28,7 +28,13 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import torch
 
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
+REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:8765/auth/google/callback")
+
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    print("⚠️ WARNING: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables are not set. Google Auth will not work.")
 # # For local development, allow insecure transport for OAuthlib
 # if "localhost" in REDIRECT_URI or "127.0.0.1" in REDIRECT_URI:
 #     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
