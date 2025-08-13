@@ -35,7 +35,7 @@ A web-based application for converting audio files to text with specialized Pali
 
 ## Quick Start
 
-**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
+**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index-server.html`
 
 ### Step 1: Install Dependencies
 
@@ -123,7 +123,7 @@ A web-based application for converting audio files to text with specialized Pali
 ### Step 3: Use the Application
 
 1. **Open the web interface**
-   - Open `index.html` in your web browser
+   - Open `index-server.html` in your web browser
    - Or use `launcher.html` for guided startup
 
 2. **Create your first project**
@@ -280,7 +280,7 @@ Tested on:
 
 ```text
 audio-text-converter/
-├── index.html                   # Main application page
+├── index-server.html                   # Main application page
 ├── launcher.html               # Auto-starting launcher
 ├── start-whisper-server.sh     # Server startup script
 ├── whisper-setup-guide.sh      # Whisper installation script
@@ -428,7 +428,7 @@ Edit `js/config.js` to modify:
 1. Clone or download the project
 2. Set up local Whisper backend (see setup instructions)
 3. Start the backend server: `python whisper_server.py`
-4. Open `index.html` in a web browser
+4. Open `index-server.html` in a web browser
 5. No build process required for frontend
 
 ### Testing
