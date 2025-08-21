@@ -22,7 +22,7 @@ A web-based application for converting audio files to text with specialized Pali
 - User isolation and data persistence across server restarts
 
 📄 **Document Generation**
-- Generate DOCX files from transcriptions
+- Generate PDF files from transcriptions
 - Download generated documents
 - Upload reviewed documents
 - Complete review workflow
@@ -35,115 +35,155 @@ A web-based application for converting audio files to text with specialized Pali
 
 ## Quick Start
 
-**⚡ TL;DR:** `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
+**⚡ TL;DR for Windows:**
+1. `git clone https://github.com/palasangha/PALAScribe.git && cd PALAScribe`
+2. Install Python from python.org (check "Add to PATH")
+3. `python -m venv whisper-env && whisper-env\Scripts\activate`
+4. `pip install -r requirements.txt`
+5. `winget install ffmpeg` (or download manually)
+6. **Restart Command Prompt** to refresh PATH
+7. `python palascribe_server.py`
+8. Open `index.html` in browser
 
-### Step 1: Install Dependencies
+**⚡ TL;DR for macOS/Linux:** `git clone` → `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
 
-1. **Install Python 3.8+**
-   
-   **macOS:**
-   ```bash
-   # Using Homebrew (recommended)
-   brew install python3
-   
-   # Or download from python.org
-   ```
-   
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt update
-   sudo apt install python3 python3-pip
-   ```
-   
-   **Windows:**
-   - Download from [python.org](https://www.python.org/downloads/)
-   - Make sure to check "Add Python to PATH" during installation
-   
-   **Verify installation:**
-   ```bash
-   python3 --version
-   # Should be 3.8 or higher
-   ```
+---
 
-2. **Install Python Dependencies**
-   ```bash
-   # Using requirements.txt (recommended)
-   pip install -r requirements.txt
-   
-   # Alternative: Manual installation
-   pip install openai-whisper
-   ```
+### Step 0: Get the Code
 
-3. **Install FFmpeg** (required for audio processing)
-   
-   **macOS (using Homebrew):**
-   ```bash
-   brew install ffmpeg
-   ```
-   
-   **Ubuntu/Debian:**
-   ```bash
-   sudo apt update
-   sudo apt install ffmpeg
-   ```
-   
-   **Windows:**
-   - Download from [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
-   - Add to system PATH
+```bash
+# Clone the repository
+git clone https://github.com/palasangha/PALAScribe.git
+cd PALAScribe
+```
 
-4. **Verify Installation**
-   ```bash
-   # Test Whisper
-   whisper --help
-   
-   # Test FFmpeg
-   ffmpeg -version
-   ```
+### Step 1: Install Python 3.8+
 
-### Step 2: Start PALAScribe
+**Windows:**
+- Download from [python.org](https://www.python.org/downloads/)
+- **IMPORTANT:** Check "Add Python to PATH" during installation
+- **Restart Command Prompt** after installation to refresh PATH
+- **Verify installation:**
+  ```cmd
+  python --version
+  # Should show 3.8 or higher
+  ```
 
-1. **Start the server**
-   ```bash
-   # Using the startup script (recommended)
-   ./start-palascribe.sh
-   
-   # Or start manually
-   python3 palascribe_server.py
-   ```
+**macOS:**
+```bash
+# Using Homebrew (recommended)
+brew install python3
 
-2. **Verify server is running**
-   - Server starts on `http://localhost:8765`
-   - You should see startup messages in the terminal
-   - Visit `http://localhost:8765/health` to test
+# Verify
+python3 --version
+```
 
-### Step 3: Use the Application
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip
 
-1. **Open the web interface**
-   - Open `index.html` in your web browser
-   - Or use `launcher.html` for guided startup
+# Verify
+python3 --version
+```
 
-2. **Create your first project**
-   - Click "Start Audio Conversion"
-   - Enter a project name
-   - Upload your audio file
-   - Click "Create Project" to start transcription
+### Step 2: Set Up Virtual Environment (Recommended)
 
-2. **Create Your First Project**
-   - Click "Start Audio Conversion"
-   - Enter a project name
-   - Optionally assign to a reviewer
-   - Upload your audio file
+**Windows:**
+```cmd
+# Create virtual environment
+python -m venv whisper-env
 
-3. **Convert Audio**
-   - Choose preview mode for large files (processes first 60 seconds)
-   - Click "Create Project" to start transcription
-   - Monitor progress in the notification area
+# Activate it
+whisper-env\Scripts\activate
 
-4. **Review and Approve**
-   - Navigate to "Ready for Review" to see completed transcriptions
-   - Edit and format the text using the rich text editor
-   - Use "Approve Final" to mark as complete
-   - Download the final transcription
+# You should see (whisper-env) in your prompt
+```
+
+**macOS/Linux:**
+```bash
+# Create virtual environment
+python3 -m venv whisper-env
+
+# Activate it
+source whisper-env/bin/activate
+
+# You should see (whisper-env) in your prompt
+```
+
+### Step 3: Install Python Dependencies
+
+```bash
+# Install dependencies (works on all platforms after activating venv)
+# Note: After activating virtual environment, 'python' works on all platforms
+pip install -r requirements.txt
+```
+
+### Step 4: Install FFmpeg
+
+**Windows:**
+```cmd
+# Option 1: Using winget (Windows 10/11)
+winget install ffmpeg
+# Restart Command Prompt after installation
+
+# Option 2: Manual download
+# Download from: https://ffmpeg.org/download.html
+# Choose "Windows builds by BtbN" -> Download "ffmpeg-master-latest-win64-gpl.zip"
+# Extract and add bin folder to PATH, then restart Command Prompt
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install ffmpeg
+```
+
+**Verify FFmpeg installation:**
+```bash
+# Restart Command Prompt/Terminal after installation, then test:
+ffmpeg -version
+```
+
+### Step 5: Start PALAScribe
+
+**Windows:**
+```cmd
+# Make sure you're in the project directory and virtual environment is active
+# Note: Once venv is active, 'python' works the same on all platforms
+python palascribe_server.py
+```
+
+**macOS/Linux:**
+```bash
+# Option 1: Using startup script
+./start-palascribe.sh
+
+# Option 2: Direct command (after activating venv, 'python' works too)
+python3 palascribe_server.py
+# OR (if venv is active): python palascribe_server.py
+```
+
+### Step 6: Open the Application
+
+1. **Server should start on:** `http://localhost:8765`
+2. **Open the web interface:** Open `index.html` in your web browser
+3. **Alternative:** Use `launcher.html` for guided startup
+
+---
+
+## Windows-Specific Notes
+
+- **Command differences:**
+  - Use `python` instead of `python3` (Windows doesn't typically have Python 2)
+  - Use `whisper-env\Scripts\activate` instead of `source whisper-env/bin/activate`
+- **Restart Command Prompt:** After installing Python or FFmpeg to refresh PATH
+- **Shell scripts:** `.sh` scripts don't work on Windows - use the direct Python commands instead
+- **Virtual environments:** Once activated, `python` command works consistently across all platforms
 
 ## Project Status Workflow
 
