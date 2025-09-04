@@ -2263,7 +2263,19 @@ class UIController {
         if (hasHTML) {
             editor.innerHTML = content;
         } else {
-            editor.textContent = content;
+            // Convert paragraph breaks (\n\n) to HTML for proper display
+            if (content && content.includes('\n\n')) {
+                // Split by double newlines to get paragraphs
+                const paragraphs = content.split('\n\n')
+                    .map(p => p.trim())
+                    .filter(p => p.length > 0)
+                    .map(p => `<p>${p.replace(/\n/g, ' ')}</p>`);
+                editor.innerHTML = paragraphs.join('');
+            } else {
+                // Handle single newlines as line breaks
+                const htmlContent = content.replace(/\n/g, '<br>');
+                editor.innerHTML = htmlContent;
+            }
         }
         
         this.updateTranscriptionPreview();
