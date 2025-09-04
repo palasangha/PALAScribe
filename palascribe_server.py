@@ -189,6 +189,96 @@ PALI_CORRECTIONS = {
     'becoming': 'Bhava'
 }
 
+def format_transcription_text(text):
+    """
+    Format transcribed text by adding paragraph breaks.
+    This runs as a post-processing step after Pali corrections.
+    """
+    if not text or not text.strip():
+        return text
+    
+    print("📄 Applying paragraph formatting...")
+    
+    # Split into sentences
+    import re
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if len(sentences) <= 2:
+        return text  # Not enough content to format
+    
+    formatted_paragraphs = []
+    current_paragraph = []
+    
+    # Strong discourse markers that definitely indicate new paragraphs
+    strong_markers = [
+        'well', 'so now', 'however', 'but now', 'therefore', 'thus', 'in conclusion',
+        'finally', 'first', 'second', 'third', 'next step', 'also important',
+        'for example', 'in fact', 'actually', 'ultimately', 'in summary'
+    ]
+    
+    # VRI/Buddhist-specific strong markers
+    buddhist_strong_markers = [
+        'the buddha said', 'the buddha taught', 'according to the buddha',
+        'in vipassana', 'when meditating', 'during meditation',
+        'the dhamma teaches', 'this technique', 'this method', 'this practice',
+        'noble truth', 'four foundation', 'eight fold'
+    ]
+    
+    # Question patterns that indicate topic changes
+    question_patterns = [
+        r'^what.*', r'^how.*', r'^why.*', r'^when.*', r'^where.*'
+    ]
+    
+    for i, sentence in enumerate(sentences):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+            
+        sentence_lower = sentence.lower()
+        
+        # Check if this sentence should start a new paragraph
+        should_break = False
+        
+        # Check for strong discourse markers at the beginning
+        if current_paragraph:
+            first_words = sentence_lower.split()[:4]
+            sentence_start = ' '.join(first_words)
+            
+            # Strong markers always create breaks
+            if any(marker in sentence_start for marker in strong_markers + buddhist_strong_markers):
+                should_break = True
+            
+            # Questions create breaks
+            if any(re.match(pattern, sentence_lower) for pattern in question_patterns):
+                should_break = True
+            
+            # Force break if paragraph gets too long (5+ sentences or 500+ characters)
+            current_text = '. '.join(current_paragraph)
+            if len(current_paragraph) >= 5 or len(current_text) > 500:
+                should_break = True
+        
+        # Start new paragraph if needed
+        if should_break and current_paragraph:
+            formatted_paragraphs.append('. '.join(current_paragraph) + '.')
+            current_paragraph = []
+        
+        # Add sentence to current paragraph
+        current_paragraph.append(sentence)
+    
+    # Add any remaining sentences
+    if current_paragraph:
+        formatted_paragraphs.append('. '.join(current_paragraph) + '.')
+    
+    # Join paragraphs with double line breaks
+    formatted_text = '\n\n'.join(formatted_paragraphs)
+    
+    paragraph_count = len(formatted_paragraphs)
+    
+    print(f"✅ Paragraph formatting applied: {len(sentences)} sentences → {paragraph_count} paragraphs")
+    return formatted_text
+
+
 def apply_pali_corrections(text):
     """
     Apply Pali word corrections to transcribed text using simple pattern matching.
@@ -1440,6 +1530,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     else:
                         print(f"❌ SRT file not found: {srt_file}")
             
+            # Initialize formatted_text as fallback
+            formatted_text = transcription
+            
             if transcription.strip():
                 print(f"📝 Generated transcription: {word_count} words")
                 
@@ -1451,6 +1544,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 if transcription != original_transcription:
                     print("✅ Pali corrections were applied!")
                     word_count = len(transcription.split())
+                
+                # Apply text formatting as post-processing
+                print("📄 Applying text formatting...")
+                formatted_text = format_transcription_text(transcription)
                 
                 # Clean up text file
                 try:
@@ -1480,7 +1577,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             return {
                 "success": True,
                 "transcription": transcription,
-                "formatted_text": transcription,  # For now, same as transcription
+                "formatted_text": formatted_text,  # Now contains properly formatted text
                 "word_count": word_count,
                 "processing_time": processing_time,
                 "model": model,
