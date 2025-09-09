@@ -96,6 +96,7 @@ class UIController {
             btnStartConversion: document.getElementById('btn-start-conversion'),
             btnReadyReview: document.getElementById('btn-ready-review'),
             btnApproved: document.getElementById('btn-approved'),
+            btnManageDictionary: document.getElementById('btn-manage-dictionary'),
             
             // Back to dashboard buttons
             btnBackToDashboardReview: document.getElementById('btn-back-to-dashboard-review'),
@@ -226,6 +227,13 @@ class UIController {
             this.elements.btnApproved.addEventListener('click', () => {
                 console.log('🔔 Approved button clicked');
                 this.showView('approved');
+            });
+        }
+        
+        if (this.elements.btnManageDictionary) {
+            this.elements.btnManageDictionary.addEventListener('click', () => {
+                console.log('🔔 Manage Dictionary button clicked');
+                this.showDictionaryManagement();
             });
         }
         
@@ -2390,6 +2398,20 @@ class UIController {
         if (this.elements.newProjectModal) {
             this.elements.newProjectModal.classList.add('hidden');
             this.elements.newProjectModal.style.display = 'none';
+        }
+    }
+
+    // Show dictionary management interface
+    showDictionaryManagement() {
+        console.log('🔔 Opening dictionary management...');
+        // For now, open a new tab with a simple dictionary management interface
+        // In future, this could be a modal or integrated view
+        const dictionaryUrl = '/dictionary-management.html';
+        const newWindow = window.open(dictionaryUrl, '_blank', 'width=1000,height=700,scrollbars=yes,resizable=yes');
+        
+        if (!newWindow) {
+            // Fallback if popup blocked
+            alert('Dictionary Management:\nPopup blocked. Please allow popups for this site and try again.\n\nAlternatively, you can manually navigate to: ' + dictionaryUrl);
         }
     }
 

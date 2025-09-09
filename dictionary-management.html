@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PALAScribe - Dictionary Management</title>
+    <link rel="stylesheet" href="css/tailwind-minimal.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-purple-600 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                        <span class="text-purple-600 font-bold text-sm">📚</span>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white">Dictionary Management</h1>
+                        <p class="text-sm text-purple-100">English → Pali Word Mappings</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="btn-close-window" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg text-sm">
+                        Close Window
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Status Message -->
+        <div id="status-message" class="hidden mb-6 p-4 rounded-lg">
+            <div class="flex">
+                <div class="ml-3">
+                    <p class="text-sm font-medium" id="status-text"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add New Word Mapping -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Add New Word Mapping</h3>
+                <p class="text-sm text-gray-600">Add English words that should be automatically corrected to Pali.</p>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="english-word" class="block text-sm font-medium text-gray-700 mb-2">English Word</label>
+                        <input type="text" id="english-word" placeholder="e.g., buddha, dharma, karma" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    </div>
+                    <div>
+                        <label for="pali-word" class="block text-sm font-medium text-gray-700 mb-2">Pali Word</label>
+                        <input type="text" id="pali-word" placeholder="e.g., Buddha, Dhamma, Kamma" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                    </div>
+                </div>
+                <button id="btn-add-word" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium">
+                    Add Word Mapping
+                </button>
+            </div>
+        </div>
+
+        <!-- Current Dictionary -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Current Dictionary</h3>
+                        <p class="text-sm text-gray-600">Currently configured word mappings.</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="search-dictionary" placeholder="Search mappings..." 
+                               class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <button id="btn-refresh" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dictionary Table -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                English Word
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Pali Word
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Type
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="dictionary-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Dictionary entries will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading-indicator" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                <span class="text-gray-700">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        class DictionaryManager {
+            constructor() {
+                this.bindEvents();
+                this.loadDictionary();
+            }
+
+            bindEvents() {
+                // Close window button
+                document.getElementById('btn-close-window').addEventListener('click', () => {
+                    window.close();
+                });
+
+                // Add word button
+                document.getElementById('btn-add-word').addEventListener('click', () => {
+                    this.addWordMapping();
+                });
+
+                // Refresh button
+                document.getElementById('btn-refresh').addEventListener('click', () => {
+                    this.loadDictionary();
+                });
+
+                // Search functionality
+                document.getElementById('search-dictionary').addEventListener('input', (e) => {
+                    this.filterDictionary(e.target.value);
+                });
+
+                // Enter key to add word
+                document.getElementById('english-word').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.addWordMapping();
+                });
+                
+                document.getElementById('pali-word').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.addWordMapping();
+                });
+            }
+
+            showStatus(message, type = 'info') {
+                const statusDiv = document.getElementById('status-message');
+                const statusText = document.getElementById('status-text');
+                
+                statusDiv.className = `mb-6 p-4 rounded-lg ${
+                    type === 'success' ? 'bg-green-100 text-green-800' :
+                    type === 'error' ? 'bg-red-100 text-red-800' :
+                    'bg-blue-100 text-blue-800'
+                }`;
+                
+                statusText.textContent = message;
+                statusDiv.classList.remove('hidden');
+                
+                // Auto-hide after 3 seconds
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 3000);
+            }
+
+            async loadDictionary() {
+                document.getElementById('loading-indicator').classList.remove('hidden');
+                
+                try {
+                    // For now, display the hardcoded dictionary from the server
+                    // In future, this would be loaded from a persistent database
+                    const response = await fetch('/api/dictionary');
+                    
+                    if (response.ok) {
+                        const dictionary = await response.json();
+                        this.displayDictionary(dictionary);
+                        this.showStatus(`Loaded ${Object.keys(dictionary).length} word mappings`, 'success');
+                    } else {
+                        throw new Error('Failed to load dictionary');
+                    }
+                } catch (error) {
+                    console.error('Error loading dictionary:', error);
+                    this.showStatus('Error loading dictionary: ' + error.message, 'error');
+                    // Show default dictionary as fallback
+                    this.displayDefaultDictionary();
+                } finally {
+                    document.getElementById('loading-indicator').classList.add('hidden');
+                }
+            }
+
+            displayDefaultDictionary() {
+                // Show the hardcoded dictionary for now
+                const defaultDictionary = {
+                    'buddha': 'Buddha',
+                    'budha': 'Buddha',
+                    'budhha': 'Buddha',
+                    'dharma': 'Dhamma',
+                    'darma': 'Dhamma',
+                    'dhamma': 'Dhamma',
+                    'sangha': 'Saṅgha',
+                    'sanga': 'Saṅgha',
+                    'sankha': 'Saṅgha',
+                    'nirvana': 'Nibbāna',
+                    'nirvāna': 'Nibbāna',
+                    'nibbana': 'Nibbāna',
+                    'nibbāna': 'Nibbāna',
+                    'karma': 'Kamma',
+                    'karman': 'Kamma',
+                    'kamma': 'Kamma'
+                };
+                
+                this.displayDictionary(defaultDictionary);
+                this.showStatus('Showing built-in dictionary (Read-only)', 'info');
+            }
+
+            displayDictionary(dictionary) {
+                const tbody = document.getElementById('dictionary-table-body');
+                tbody.innerHTML = '';
+
+                Object.entries(dictionary).forEach(([english, pali]) => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50';
+                    
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${english}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">${pali}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Built-in</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="text-gray-400">Read-only</span>
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+            }
+
+            filterDictionary(searchTerm) {
+                const rows = document.querySelectorAll('#dictionary-table-body tr');
+                const term = searchTerm.toLowerCase();
+                
+                rows.forEach(row => {
+                    const english = row.children[0].textContent.toLowerCase();
+                    const pali = row.children[1].textContent.toLowerCase();
+                    
+                    if (english.includes(term) || pali.includes(term)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            }
+
+            async addWordMapping() {
+                const englishWord = document.getElementById('english-word').value.trim();
+                const paliWord = document.getElementById('pali-word').value.trim();
+
+                if (!englishWord || !paliWord) {
+                    this.showStatus('Please enter both English and Pali words', 'error');
+                    return;
+                }
+
+                document.getElementById('loading-indicator').classList.remove('hidden');
+                
+                try {
+                    // For now, show that it's not implemented yet
+                    this.showStatus('Adding custom word mappings is not yet implemented. This will be available in a future update.', 'info');
+                    
+                    // Clear the form
+                    document.getElementById('english-word').value = '';
+                    document.getElementById('pali-word').value = '';
+                    
+                } catch (error) {
+                    console.error('Error adding word mapping:', error);
+                    this.showStatus('Error adding word mapping: ' + error.message, 'error');
+                } finally {
+                    document.getElementById('loading-indicator').classList.add('hidden');
+                }
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new DictionaryManager();
+        });
+    </script>
+</body>
+</html>

@@ -609,6 +609,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         """Handle GET requests"""
         if self.path == '/health':
             self.handle_health_check()
+        elif self.path == '/api/dictionary':
+            self.handle_get_dictionary()
         elif self.path == '/projects':
             self.handle_get_projects()
         elif self.path.startswith('/projects/'):
@@ -791,6 +793,16 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 self.send_error_response(404, "Project not found")
         except Exception as e:
             print(f"❌ Error getting project {project_id}: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_get_dictionary(self):
+        """Get current dictionary mappings"""
+        try:
+            print("📚 Getting dictionary mappings...")
+            # Return the current PALI_CORRECTIONS dictionary
+            self.send_json_response(PALI_CORRECTIONS)
+        except Exception as e:
+            print(f"❌ Error getting dictionary: {e}")
             self.send_error_response(500, str(e))
     
     def handle_create_project(self):
