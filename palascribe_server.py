@@ -703,7 +703,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def do_DELETE(self):
         """Handle DELETE requests"""
-        if self.path.startswith('/projects/'):
+        if self.path.startswith('/api/dictionary/'):
+            english_word = urllib.parse.unquote(self.path.split('/')[-1])
+            self.handle_delete_dictionary_word(english_word)
+        elif self.path.startswith('/projects/'):
             project_id = self.path.split('/')[-1]
             self.handle_delete_project(project_id)
         else:
@@ -803,6 +806,37 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.send_json_response(PALI_CORRECTIONS)
         except Exception as e:
             print(f"❌ Error getting dictionary: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_delete_dictionary_word(self, english_word):
+        """Delete a word mapping from the dictionary"""
+        try:
+            print(f"🗑️  Attempting to delete dictionary word: {english_word}")
+            
+            # Check if the word exists in the dictionary
+            if english_word not in PALI_CORRECTIONS:
+                print(f"❌ Word '{english_word}' not found in dictionary")
+                self.send_error_response(404, f"Word '{english_word}' not found in dictionary")
+                return
+            
+            # Remove the word from the dictionary
+            pali_word = PALI_CORRECTIONS[english_word]
+            del PALI_CORRECTIONS[english_word]
+            
+            print(f"✅ Deleted dictionary mapping: '{english_word}' → '{pali_word}'")
+            
+            # Send success response
+            self.send_json_response({
+                "success": True,
+                "message": f"Successfully deleted mapping '{english_word}' → '{pali_word}'",
+                "deleted": {
+                    "english": english_word,
+                    "pali": pali_word
+                }
+            })
+            
+        except Exception as e:
+            print(f"❌ Error deleting dictionary word '{english_word}': {e}")
             self.send_error_response(500, str(e))
     
     def handle_create_project(self):
