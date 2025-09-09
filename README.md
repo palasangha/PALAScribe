@@ -10,10 +10,12 @@ A web-based application for converting audio files to text with specialized Pali
 - Privacy-focused: all processing happens locally
 - Support for various file sizes with preview mode for large files
 
-📝 **Pali Word Recognition**
+📝 **Pali Word Recognition & Management**
 - Automatic detection of Pali Buddhist terms
 - Special formatting for recognized words
 - Extensive built-in Pali dictionary
+- **NEW:** Dictionary Management interface for viewing and deleting word mappings
+- Real-time dictionary updates via web interface
 
 📊 **Multi-User Project Management**
 - Create and manage transcription projects with database persistence
@@ -32,20 +34,6 @@ A web-based application for converting audio files to text with specialized Pali
 - SQLite database for data persistence
 - RESTful API for all operations
 - No port conflicts or multiple server management
-
-## Quick Start
-
-**⚡ TL;DR for Windows:**
-1. `git clone https://github.com/palasangha/PALAScribe.git && cd PALAScribe`
-2. Install Python from python.org (check "Add to PATH")
-3. `python -m venv whisper-env && whisper-env\Scripts\activate`
-4. `pip install -r requirements.txt`
-5. `winget install ffmpeg` (or download manually)
-6. **Restart Command Prompt** to refresh PATH
-7. `python palascribe_server.py`
-8. Open `index.html` in browser
-
-**⚡ TL;DR for macOS/Linux:** `git clone` → `pip install -r requirements.txt` → `brew install ffmpeg` → `./start-palascribe.sh` → Open `index.html`
 
 ---
 
@@ -171,8 +159,10 @@ python3 palascribe_server.py
 ### Step 6: Open the Application
 
 1. **Server should start on:** `http://localhost:8765`
-2. **Open the web interface:** Open `index.html` in your web browser
+2. **Open the web interface:** Open `index-server.html` in your web browser
 3. **Alternative:** Use `launcher.html` for guided startup
+
+**Note:** The SQLite database (`palascribe.db`) will be automatically created on first run. No manual database setup required.
 
 ---
 
@@ -249,7 +239,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
    # Check if port is in use
    lsof -i :8765
    
-   # Kill existing process if needed
+   # Kill process on port 8765 if needed
    kill -9 $(lsof -ti:8765)
    ```
 
@@ -288,6 +278,28 @@ The application includes a comprehensive Pali dictionary with:
 - **Text references**: dhammapada, vinaya, sutta, abhidhamma
 
 Recognized Pali words are automatically highlighted in the transcription.
+
+## Dictionary Management
+
+PALAScribe now includes a web-based dictionary management interface accessible from the main dashboard:
+
+**Features:**
+- **View Dictionary**: Browse all English → Pali word mappings
+- **Search & Filter**: Find specific word mappings quickly
+- **Delete Words**: Remove unwanted dictionary entries with confirmation
+- **Real-time Updates**: Changes take effect immediately for new transcriptions
+
+**Access:** Click "📚 Manage Dictionary" in the top header of the main dashboard.
+
+**Note:** Dictionary changes modify the server's in-memory dictionary. For permanent persistence across server restarts, consider backing up your customizations.
+
+## Text Formatting
+
+The transcription system automatically formats text with:
+
+- **Paragraph breaks**: Intelligent paragraph detection based on discourse markers
+- **Buddhist context awareness**: Recognizes VRI-style content patterns
+- **Clean output**: Simplified formatting focused on readability
 
 ## Keyboard Shortcuts
 
@@ -415,7 +427,7 @@ Edit `js/config.js` to modify:
 1. **Backend server not starting**
    - Check Python installation: `python --version`
    - Verify Whisper installation: `whisper --help`
-   - Check port availability: `lsof -i :8765`
+   - Check port availability: `lsof -i :8081`
    - Kill existing processes: `kill -9 $(lsof -ti:8765)`
 
 2. **Transcription fails**
