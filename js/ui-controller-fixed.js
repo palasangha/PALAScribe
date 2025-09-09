@@ -96,7 +96,7 @@ class UIController {
             btnStartConversion: document.getElementById('btn-start-conversion'),
             btnReadyReview: document.getElementById('btn-ready-review'),
             btnApproved: document.getElementById('btn-approved'),
-            btnManageDictionary: document.getElementById('btn-manage-dictionary'),
+            linkManageDictionary: document.getElementById('link-manage-dictionary'),
             
             // Back to dashboard buttons
             btnBackToDashboardReview: document.getElementById('btn-back-to-dashboard-review'),
@@ -230,9 +230,10 @@ class UIController {
             });
         }
         
-        if (this.elements.btnManageDictionary) {
-            this.elements.btnManageDictionary.addEventListener('click', () => {
-                console.log('🔔 Manage Dictionary button clicked');
+        if (this.elements.linkManageDictionary) {
+            this.elements.linkManageDictionary.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('🔔 Manage Dictionary link clicked');
                 this.showDictionaryManagement();
             });
         }
