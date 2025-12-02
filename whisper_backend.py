@@ -14,13 +14,33 @@ from pathlib import Path
 def execute_whisper_command(audio_file_path, model="medium", language="English"):
     """Execute Whisper command and return results"""
     
-    # Ensure we're in the right directory
-    project_dir = "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
-    os.chdir(project_dir)
+    # Determine project directory (configurable via env var)
+    project_dir = os.environ.get(
+        "AUDIO_TEXT_CONVERTER_DIR",
+        "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter",
+    )
+    if not os.path.exists(project_dir):
+        # Fall back to the directory containing this script
+        project_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Locate whisper executable inside possible virtualenv locations
+    possible_whisper = [
+        os.path.join(project_dir, 'whisper-env', 'bin', 'whisper'),
+        os.path.join(project_dir, 'whisper-env', 'whisper-env', 'bin', 'whisper'),
+    ]
+    whisper_exec = None
+    for p in possible_whisper:
+        if os.path.exists(p):
+            whisper_exec = p
+            break
+
+    # Fallback to system `whisper` if no bundled executable is found
+    if not whisper_exec:
+        whisper_exec = 'whisper'
+
     # Construct the Whisper command
     command = [
-        "whisper-env/bin/whisper", 
+        whisper_exec,
         audio_file_path,
         "--model", model,
         "--output_format", "txt",

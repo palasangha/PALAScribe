@@ -320,9 +320,13 @@ class WhisperRequestHandler(BaseHTTPRequestHandler):
     def execute_whisper_command(self, audio_file_path, model="medium", language="English", preview_mode=False, preview_duration=60):
         """Execute Whisper command and return results"""
         
-        # Ensure we're in the right directory
-        project_dir = "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter"
-        os.chdir(project_dir)
+        # Determine project directory (configurable via env var)
+        project_dir = os.environ.get(
+            "AUDIO_TEXT_CONVERTER_DIR",
+            "/Users/vijayaraghavanvedantham/Documents/VRI Tech Projects/audio-text-converter",
+        )
+        if not os.path.exists(project_dir):
+            project_dir = os.path.dirname(os.path.abspath(__file__))
         
         # Get file size for logging and time estimation
         file_size = os.path.getsize(audio_file_path)
