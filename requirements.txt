@@ -1,10 +1,26 @@
-# PALAScribe Audio-to-Text Converter Dependencies
+# Minimal requirements for PALAScribe (server + transcription)
+# Note: pin versions or run `pip freeze > requirements.txt` from your venv
+# For Whisper (OpenAI) and PyTorch; install torch separately with the correct CUDA
+# For CPU-only: follow PyTorch install instructions at https://pytorch.org/get-started/locally/
 
-# Core transcription engine
-openai-whisper>=20230314
+# Core ML / transcription
+openai-whisper
+torch
 
-# Additional dependencies for better audio processing (optional)
-# These are automatically installed with whisper but listed for completeness
-torch>=1.9.0
-torchaudio>=0.9.0
-numpy>=1.21.0
+# Audio / signal processing
+numpy
+soundfile
+librosa
+ffmpeg-python
+
+# Utilities
+tqdm
+
+# PDF generation (optional)
+reportlab
+
+# Optional: used by some helper scripts
+python-dotenv
+
+# If you prefer exact pins, run on your dev machine:
+# pip freeze > requirements.txt
