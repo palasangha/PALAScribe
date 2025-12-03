@@ -177,6 +177,15 @@ class ServerProjectManager {
             const formData = new FormData();
             formData.append('audio', audioFile);
             formData.append('preview', previewMode ? 'true' : 'false');
+            // Include optional sourcePath from the create form if provided
+            try {
+                const srcEl = document.getElementById('source-path');
+                if (srcEl && srcEl.value) {
+                    formData.append('sourcePath', srcEl.value);
+                }
+            } catch (e) {
+                console.warn('Could not read source-path element:', e);
+            }
 
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/audio`, {
                 method: 'POST',
@@ -196,6 +205,9 @@ class ServerProjectManager {
             if (project) {
                 project.audio_file_name = audioFile.name;
                 project.audio_file_path = result.file_path;
+                // Preserve original uploaded name and optional source path if server returned them
+                if (result.original_name) project.original_name = result.original_name;
+                if (result.source_path) project.source_path = result.source_path;
                 project.status = 'processing';
             }
 

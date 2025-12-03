@@ -9,30 +9,23 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <!-- Header -->
-    <header class="bg-blue-600 shadow-sm">
+    <header class="header-bar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center py-4">
-                <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                        <span class="text-blue-600 font-bold text-sm">🎵</span>
+            <div class="flex items-center justify-between py-8">
+                <div class="flex items-center gap-3 header-left">
+                    <div class="logo-ring">
+                        <span class="logo-emoji">🎵</span>
                     </div>
-                    <div>
-                        <h1 class="text-xl font-bold text-white">PALAScribe</h1>
-                        <p class="text-sm text-blue-100">VRI Audio Transcription</p>
+                    <div class="brand-name">
+                        <div class="brand-title">PALAScribe</div>
+                        <div class="brand-subtitle">VRI Audio Transcription</div>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <!-- Dictionary Management Link -->
-                    <a href="#" id="link-manage-dictionary" class="text-blue-100 hover:text-white text-sm font-medium flex items-center space-x-1 transition-colors">
-                        <span>📚</span>
-                        <span>Manage Dictionary</span>
-                    </a>
-                    
-                    <!-- Processing Status Indicator (inline) -->
-                    <div id="processing-status-indicator" class="hidden flex items-center space-x-2 text-xs text-blue-100">
-                        <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-100"></div>
+
+                <div class="flex items-center gap-4 header-right">
+                    <div id="processing-status-indicator" class="hidden flex items-center space-x-2 text-sm text-white/80">
+                        <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-white/80"></div>
                         <span id="processing-status-text">Processing...</span>
-                        <button id="btn-cancel-processing" class="ml-2 text-red-300 hover:text-red-100 text-xs underline">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -139,68 +132,44 @@
         
         <!-- Dashboard View -->
         <div id="view-dashboard" class="view-content">
-            <!-- Dashboard Header -->
-            <div class="mb-8">
-                <h2 class="text-3xl font-bold text-gray-900 mb-1">Audio Transcription Dashboard</h2>
-                <p class="text-gray-600">Manage your audio transcription projects efficiently.</p>
-            </div>
-
-            <!-- Quick Actions Section -->
-            <div class="mb-12">
-                <div class="mb-6">
-                    <h3 class="text-xl font-semibold text-gray-900 mb-2">Quick Actions</h3>
-                    <div class="h-px bg-gradient-to-r from-blue-500 to-transparent"></div>
+            <!-- Dashboard Header (compact) -->
+                <div class="mb-4">
+                    <p class="text-sm text-gray-600">Manage transcription projects</p>
                 </div>
-                <div class="grid grid-cols-3 gap-6">
-                    <!-- Start Audio Conversion -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                            <span class="mr-2">🎙️</span>
-                            Start Audio Conversion
-                        </h3>
-                        <p class="text-gray-600 mb-6 text-sm">Upload and transcribe new audio files with intelligent Pali correction.</p>
-                        <button id="btn-start-conversion" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                            Start New Project
-                        </button>
-                    </div>
 
-                    <!-- Ready for Review -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-ready-review">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                            <span class="mr-2">📝</span>
-                            Ready for Review
-                        </h3>
-                        <p class="text-gray-600 mb-6 text-sm">View and edit transcriptions that need review and approval.</p>
-                        <button class="bg-white hover:bg-orange-50 text-blue-600 border border-blue-600 px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                            View Pending
-                        </button>
-                    </div>
-
-                    <!-- Approved Projects -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer" id="btn-approved">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                            <span class="mr-2">✅</span>
-                            Approved
-                        </h3>
-                        <p class="text-gray-600 mb-6 text-sm">Access completed and approved transcription projects.</p>
-                        <button class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors w-full">
-                            View Approved
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <!-- Quick Actions removed per user request -->
 
             <!-- Projects Management Section -->
-            <div class="mb-6">
-                <h3 class="text-xl font-semibold text-gray-900 mb-2">Projects Management</h3>
-                <div class="h-px bg-gradient-to-r from-green-500 to-transparent"></div>
+            <div class="mb-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <h3 class="text-lg font-medium text-gray-900">Recent Projects</h3>
+                        <div class="flex items-center gap-2">
+                            <button id="btn-filter-all" class="text-sm px-3 py-1 rounded-md bg-gray-100">All</button>
+                            <button id="btn-filter-review" class="text-sm px-3 py-1 rounded-md bg-gray-50">Review</button>
+                            <button id="btn-filter-approved" class="text-sm px-3 py-1 rounded-md bg-gray-50">Approved</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button id="btn-start-conversion" class="cta-primary" aria-label="Start New Project">
+                            <span class="cta-icon">➕</span>
+                            <span class="cta-label">Start New Project</span>
+                        </button>
+
+                        <a href="#" id="link-manage-dictionary" class="link-ghost" aria-label="Manage Pali Dictionary">
+                            <span class="mr-1">📚</span>
+                            <span>Manage Pali Dictionary</span>
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <!-- Recent Projects Table -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
                     <div class="flex justify-between items-center">
-                        <h3 class="text-lg font-semibold text-gray-900">Recent Projects</h3>
+                        
                         <div class="flex space-x-2">
                             <input type="text" id="search-projects" placeholder="Search projects..." 
                                    class="px-3 py-2 border border-gray-300 rounded-md text-sm">
@@ -213,22 +182,16 @@
 
                 <!-- Projects Table -->
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 projects-table">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th scope="col" data-column="name" class="px-4 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                                    NAME ⇅
+                                <th scope="col" data-column="name" class="px-3 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                                    NAME
                                 </th>
-                                <th scope="col" data-column="status" class="px-4 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                                    STATUS ⇅
+                                <th scope="col" data-column="meta" class="px-3 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                                    INFO
                                 </th>
-                                <th scope="col" data-column="created" class="px-4 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                                    CREATED DATE ⇅
-                                </th>
-                                <th scope="col" data-column="assigned" class="px-4 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                                    ASSIGNED TO ⇅
-                                </th>
-                                <th scope="col" class="px-4 py-4 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                                <th scope="col" class="px-3 py-2 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">
                                     ACTIONS
                                 </th>
                             </tr>
@@ -359,6 +322,11 @@
                                     <span class="text-gray-400">•</span>
                                     <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">Editing Mode</span>
                                 </div>
+                                <div class="ml-4">
+                                    <div id="project-header" class="text-sm text-gray-600"></div>
+                                    <button id="btn-show-source-info" class="text-xs text-blue-600 hover:underline mt-1" style="background:none;border:none;padding:0;cursor:pointer;">Show Source Info ▾</button>
+                                    <pre id="export-manifest-details" class="hidden mt-2 p-2 text-xs bg-gray-50 border border-gray-200 rounded max-h-48 overflow-auto" style="white-space:pre-wrap;"></pre>
+                                </div>
                             </div>
                             <div id="review-audio-player" class="flex items-center bg-gray-50 px-6 py-3 rounded-lg border border-gray-200">
                                 <!-- Compact audio player will be inserted here -->
@@ -376,14 +344,7 @@
                         
                         <!-- Action Buttons -->
                         <div class="flex items-center space-x-4">
-                            <button id="btn-save-draft" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
-                                <span>💾</span>
-                                <span>Save Draft</span>
-                            </button>
-                            <button id="btn-approve-final" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
-                                <span>✅</span>
-                                <span>Approve</span>
-                            </button>
+                            <!-- Save Draft and Approve buttons moved to bottom action bar (per user request) -->
                             <button id="btn-back-to-dashboard" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors flex items-center space-x-2 shadow-sm">
                                 <span>←</span>
                                 <span>Back to Dashboard</span>
@@ -480,10 +441,10 @@
                     
                     <!-- Rich Text Editor -->
                     <div id="transcription-editor" 
-                         class="flex-1 py-8 border-0 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base leading-relaxed bg-white overflow-y-auto resize-none font-sans" 
-                         contenteditable="true" 
-                         data-placeholder="Start typing your transcription here..."
-                         style="min-height: calc(75vh - 100px); outline: none; padding-left: 80px !important; padding-right: 80px !important;">
+                        class="flex-1 py-8 border-0 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base leading-relaxed bg-white overflow-y-auto resize-none font-sans" 
+                        contenteditable="true" 
+                        data-placeholder="Start typing your transcription here..."
+                        style="min-height: calc(75vh - 100px); outline: none; padding-left: 24px !important; padding-right: 24px !important;">
                          <div class="text-gray-400 italic">
                             <p class="mb-4">📝 <strong>Transcription Editor</strong></p>
                             <p class="mb-2">• Type or paste your audio transcription here</p>
@@ -512,7 +473,7 @@
                     </div>
                     
                     <!-- Preview Content -->
-                    <div id="transcription-preview" class="flex-1 py-8 overflow-y-auto text-base leading-relaxed bg-gray-50 font-sans" style="min-height: calc(75vh - 100px); padding-left: 80px !important; padding-right: 80px !important;">
+                    <div id="transcription-preview" class="flex-1 py-8 overflow-y-auto text-base leading-relaxed bg-gray-50 font-sans" style="min-height: calc(75vh - 100px); padding-left: 24px !important; padding-right: 24px !important;">
                         <div class="text-gray-400 italic">
                             <div class="text-center py-16">
                                 <div class="text-5xl mb-6">👁️</div>
@@ -528,21 +489,29 @@
             </div>
 
             <!-- Bottom Action Bar -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 px-8 py-6 mt-8">
+            <div id="bottom-action-bar" class="bg-white rounded-lg shadow-sm border border-gray-200 px-8 py-6 mt-8">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center space-x-4">
-                        <button id="btn-reset-text" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
+                        <button id="btn-reset-text" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
                             <span>🔄</span>
                             <span>Reset Text</span>
+                        </button>
+                        <button id="btn-save-draft" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 shadow-sm">
+                            <span>💾</span>
+                            <span>Save Draft</span>
+                        </button>
+                        <button id="btn-approve-final" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
+                            <span>✔️</span>
+                            <span>Approve</span>
                         </button>
                         <div class="h-6 w-px bg-gray-300"></div>
                         <button id="btn-export-pdf" class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2 shadow-sm">
                             <span>📄</span>
-                            <span>Export PDF</span>
+                            <span>Save as PDF</span>
                         </button>
                     </div>
                     
-                    <div class="flex items-center space-x-8">
+                        <div class="flex items-center space-x-8">
                         <div class="flex items-center space-x-6 text-sm">
                             <div class="flex items-center space-x-2 text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
                                 <span class="text-blue-600">📝</span>
@@ -555,9 +524,12 @@
                                 <span id="char-count" class="font-semibold text-gray-800">0</span>
                             </div>
                         </div>
-                        <div class="flex items-center space-x-2 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
-                            <span class="text-green-600 font-semibold" id="auto-save-status">✓</span>
-                            <span class="text-green-700 font-medium">Auto-saved</span>
+                        <div class="flex items-center space-x-4">
+                            <div id="audio-file-name" class="text-sm text-gray-600 italic">No audio</div>
+                            <div class="flex items-center space-x-2 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                                <span class="text-green-600 font-semibold" id="auto-save-status">✓</span>
+                                <span class="text-green-700 font-medium">Auto-saved</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -597,6 +569,13 @@
                         <label for="project-audio-file" class="block text-sm font-medium text-gray-700">Audio File</label>
                         <input type="file" id="project-audio-file" name="audioFile" accept="audio/*" required
                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label for="source-path" class="block text-sm font-medium text-gray-700">Source Path (optional)</label>
+                        <input type="text" id="source-path" name="sourcePath" placeholder="Local path or notes about source (optional)"
+                               class="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md shadow-sm text-sm text-gray-600" />
+                        <p class="text-xs text-gray-400">Optional: enter a local path or note about the original file (not required).</p>
                     </div>
 
                     <div class="flex items-center">

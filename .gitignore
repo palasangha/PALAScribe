@@ -72,3 +72,15 @@ tmp/
 
 # Cache files
 .cache/
+
+# Exported/generated files
+exports/
+
+# Local artifacts
+palascribe.db
+uploads/
+*.srt
+tmp*.srt
+*.mp3
+*.pdf
+*.txt

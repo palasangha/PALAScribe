@@ -346,6 +346,58 @@
     }
 }
 
+/* Compact Brand Bar (Variant 1) */
+:root{
+    --brand-700: #1e3a8a; /* indigo-800 */
+    --brand-600: #2563eb; /* blue-600 */
+    --brand-50: #eff6ff;
+    --muted: #94a3b8;
+}
+
+.header-bar{
+    background: linear-gradient(180deg, var(--brand-700), var(--brand-600));
+    color: white;
+    box-shadow: 0 2px 12px rgba(2,6,23,0.12);
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    min-height: 96px;
+}
+.header-bar .logo-ring{
+    width: 56px; height: 56px; display:flex; align-items:center; justify-content:center; border-radius:10px;
+    background: rgba(255,255,255,0.08); backdrop-filter: blur(3px);
+}
+.logo-emoji{ font-size:22px; }
+.brand-title{ font-weight:700; font-size:1.5rem; line-height:1; }
+.brand-subtitle{ font-size:1rem; color: rgba(255,255,255,0.9); margin-top:4px; }
+
+.cta-primary{
+    display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:9999px;
+    background: white; color: var(--brand-600); font-weight:600; border: none; cursor:pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.12);
+}
+.cta-primary .cta-icon{ font-size:14px; }
+.cta-primary:hover{ transform: translateY(-1px); }
+
+.link-ghost{ color: rgba(255,255,255,0.9); text-decoration:none; font-weight:500; }
+.link-ghost:hover{ color: white; text-decoration:underline; }
+
+/* When link is used in page content (not the header), make it visible and explicit */
+.view-content .link-ghost {
+    color: #374151; /* dark-gray on white */
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+.view-content .link-ghost:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px){
+    .brand-subtitle{ display:none; }
+    .cta-primary .cta-label{ display:none; }
+}
+
 /* Review Interface Styles */
 .text-segment {
     @apply transition-all duration-200;
@@ -545,6 +597,12 @@
     outline: none;
 }
 
+/* Quick-win: reduce editor side padding to improve usable width */
+#transcription-editor {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+}
+
 #transcription-editor:empty:before {
     content: attr(data-placeholder);
     color: #9ca3af;
@@ -710,7 +768,7 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    padding: 12px 16px;
+    padding: 8px 12px;
 }
 
 .projects-table th:last-child {
@@ -718,12 +776,22 @@
 }
 
 .projects-table td {
-    padding: 10px 16px;
+    padding: 6px 10px;
     white-space: nowrap;
     border-bottom: 1px solid #f1f3f4;
     border-right: 1px solid #f1f3f4;
     vertical-align: middle;
     background-color: #ffffff;
+}
+
+/* Compact heading and subtext styles for denser dashboard */
+.dashboard-compact-title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.dashboard-compact-subtext {
+    font-size: 0.85rem;
+    color: #6b7280;
 }
 
 .projects-table td:last-child {
@@ -733,6 +801,42 @@
 .projects-table tr:hover {
     background-color: #f8fafc !important;
     cursor: pointer;
+}
+
+/* Quick-win: hide per-row action buttons until row hover to declutter */
+.project-row-actions button,
+.project-action-btn {
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.projects-table tr:hover .project-row-actions button,
+.projects-table tr.selected .project-row-actions button,
+.projects-table tr:focus-within .project-row-actions button {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Quick-win: smaller status badges (compact) */
+.status-badge {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.72rem !important;
+}
+
+/* Quick-win: sticky bottom action bar for editor (keeps actions visible) */
+#bottom-action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 55;
+    backdrop-filter: blur(4px);
+    background: rgba(255,255,255,0.98);
+    box-shadow: 0 -6px 18px rgba(16,24,40,0.06);
+}
+
+/* Make bottom action bar buttons more compact */
+#bottom-action-bar .flex.items-center.space-x-4 > button {
+    padding: 6px 10px !important;
+    font-size: 0.9rem !important;
 }
 
 .projects-table tr:hover td {
