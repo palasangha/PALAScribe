@@ -143,6 +143,9 @@ class UIController {
             projectsTableBody: document.getElementById('projects-table-body'),
             emptyProjectsState: document.getElementById('empty-projects-state'),
             searchProjects: document.getElementById('search-projects'),
+            btnFilterAll: document.getElementById('btn-filter-all'),
+            btnFilterReview: document.getElementById('btn-filter-review'),
+            btnFilterApproved: document.getElementById('btn-filter-approved'),
             
             // Ready for Review view
             reviewProjectsTableBody: document.getElementById('review-projects-table-body'),
@@ -362,6 +365,30 @@ class UIController {
         if (this.elements.searchProjects) {
             this.elements.searchProjects.addEventListener('input', (e) => {
                 this.debouncedSearch(e.target.value);
+            });
+        }
+
+        if (this.elements.btnFilterAll) {
+            this.elements.btnFilterAll.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showView('dashboard');
+                this.refreshProjectsList();
+            });
+        }
+
+        if (this.elements.btnFilterReview) {
+            this.elements.btnFilterReview.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showView('ready-review');
+                this.refreshReviewProjectsList();
+            });
+        }
+
+        if (this.elements.btnFilterApproved) {
+            this.elements.btnFilterApproved.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showView('approved');
+                this.refreshApprovedProjectsList();
             });
         }
         
@@ -1453,9 +1480,42 @@ class UIController {
                     this.elements.projectsTableBody.appendChild(projectRow);
                 });
             }
+            // Ensure dynamic buttons have tooltips
+            try { this.addTooltipsToDynamicButtons(); } catch (e) { console.warn('Tooltip add failed', e); }
         } catch (error) {
             console.error('❌ Error refreshing projects:', error);
             this.showErrorMessage('Failed to refresh projects');
+        }
+    }
+
+    // Ensure dynamic buttons (toolbar, action buttons) have titles and aria-labels so tooltips show
+    addTooltipsToDynamicButtons() {
+        try {
+            // Toolbar buttons
+            document.querySelectorAll('.toolbar-btn, .toolbar-btn-sm, .toolbar-select, .toolbar-select-sm').forEach(btn => {
+                const cmd = btn.getAttribute('data-command');
+                if (!btn.title && cmd) {
+                    // Humanize the command name
+                    const human = cmd.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    btn.title = human;
+                }
+                if (!btn.getAttribute('aria-label')) {
+                    btn.setAttribute('aria-label', btn.title || btn.getAttribute('data-command') || 'Tool');
+                }
+            });
+
+            // Project action buttons (these are often recreated dynamically)
+            document.querySelectorAll('.project-action-btn, .project-row-actions button, #btn-save-draft, #btn-approve-final, #btn-export-pdf').forEach(btn => {
+                if (!btn.title) {
+                    // try to infer from class or innerText
+                    const inferred = (btn.getAttribute('data-command') || btn.getAttribute('aria-label') || btn.innerText || btn.textContent || '').trim();
+                    if (inferred) btn.title = inferred;
+                    else btn.title = 'Action';
+                }
+                if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label', btn.title);
+            });
+        } catch (e) {
+            console.warn('addTooltipsToDynamicButtons error', e);
         }
     }
 
@@ -1535,21 +1595,17 @@ class UIController {
         const isCurrentlyProcessing = this.currentProcessId && this.currentProcessId.includes(project.id);
         
         row.innerHTML = `
-            <td class="px-4 py-3 text-sm font-medium text-gray-900 project-name-cell" data-full-name="${UTILS.escapeHtml(project.name)}">
-                ${UTILS.escapeHtml(project.name)}
+            <td class="px-3 py-2 text-sm font-medium text-gray-900 project-name-cell" data-full-name="${UTILS.escapeHtml(project.name)}">
+                <div class="dashboard-compact-title">${UTILS.escapeHtml(project.name)}</div>
+                <div class="dashboard-compact-subtext">${UTILS.escapeHtml(project.audioFileName || assignedTo || '')}</div>
             </td>
-            <td class="px-4 py-3 text-sm">
-                <span class="table-status-badge ${statusColors[project.status] || 'bg-gray-100 text-gray-800'}">
-                    ${project.status}
-                </span>
+            <td class="px-3 py-2 text-sm text-gray-500">
+                <div class="flex items-center gap-2">
+                    <span class="table-status-badge ${statusColors[project.status] || 'bg-gray-100 text-gray-800'}">${project.status}</span>
+                    <span class="text-xs text-gray-400">• ${formattedDate}</span>
+                </div>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-500">
-                ${formattedDate}
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-500" title="${UTILS.escapeHtml(assignedTo)}">
-                ${UTILS.escapeHtml(assignedTo)}
-            </td>
-            <td class="px-4 py-3 text-sm">
+            <td class="px-3 py-2 text-sm">
                 <div class="project-row-actions" onclick="event.stopPropagation();">
                     <button class="project-action-btn btn-edit" onclick="uiController.openProject('${project.id}')" title="Edit">
                         ✏️
@@ -1625,6 +1681,34 @@ class UIController {
                     </span>
                 </div>
             `;
+            // If server provided a human-readable header (exportHeaderText), show it in the small header area
+            const headerEl = document.getElementById('project-header');
+            if (headerEl) {
+                if (project.exportHeaderText) {
+                    headerEl.textContent = project.exportHeaderText;
+                } else {
+                    headerEl.textContent = '';
+                }
+            }
+
+            // Update the small audio filename display (bottom-right area)
+            const filenameEl = document.getElementById('audio-file-name');
+            if (filenameEl) {
+                const originalName = project.original_name || project.originalName || project.original_filename || project.originalFilename || project.audioFileName || project.audio_file_name || '';
+                const sourcePath = project.source_path || project.sourcePath || '';
+                filenameEl.textContent = originalName || 'No audio';
+                if (sourcePath) filenameEl.textContent += ` • ${sourcePath}`;
+            }
+
+            // Rename Export button label to 'Save as PDF' if present
+            if (this.elements.btnExportPdf) {
+                try {
+                    this.elements.btnExportPdf.textContent = 'Save as PDF';
+                } catch (e) {
+                    // If textContent fails (e.g., contains child elements), fallback to innerText
+                    this.elements.btnExportPdf.innerText = 'Save as PDF';
+                }
+            }
         }
 
         // Set up audio player
@@ -1822,6 +1906,8 @@ class UIController {
             const row = this.createProjectTableRow(project);
             tableBody.appendChild(row);
         });
+        // Ensure dynamic buttons have titles/tooltips
+        try { this.addTooltipsToDynamicButtons(); } catch (e) { console.warn('Tooltip add failed', e); }
 
         console.log(`✅ Table populated with ${projects.length} projects for view: ${viewType}`);
     }
@@ -2113,6 +2199,13 @@ class UIController {
         editor.addEventListener('mouseup', () => this.updateToolbarState());
         editor.addEventListener('keyup', () => this.updateToolbarState());
 
+        // Ensure toolbar buttons have accessible tooltips/labels
+        try {
+            this.addTooltipsToDynamicButtons();
+        } catch (e) {
+            console.warn('Could not apply tooltips to toolbar buttons:', e);
+        }
+
         // Handle keyboard shortcuts
         editor.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
@@ -2268,6 +2361,17 @@ class UIController {
     setRichTextContent(content, hasHTML = false) {
         const editor = this.elements.transcriptionEditor;
         if (!editor) return;
+
+        // Strip inline SOURCE-INFO markers if present so editor shows only the transcription content
+        const SOURCE_START = '--- SOURCE-INFO START ---';
+        const SOURCE_END = '--- SOURCE-INFO END ---';
+        if (content && typeof content === 'string' && content.includes(SOURCE_START) && content.includes(SOURCE_END)) {
+            const start = content.indexOf(SOURCE_START);
+            const end = content.indexOf(SOURCE_END) + SOURCE_END.length;
+            const before = content.substring(0, start);
+            const after = content.substring(end);
+            content = before + after;
+        }
         
         if (hasHTML) {
             editor.innerHTML = content;
@@ -2464,6 +2568,49 @@ class UIController {
             });
             
             this.showReviewView(project);
+            // Populate the export manifest details area if the server returned them
+            try {
+                const manifestPre = document.getElementById('export-manifest-details');
+                const btn = document.getElementById('btn-show-source-info');
+                if (manifestPre) {
+                    let details = null;
+                    if (project.latestExportProvenance) details = project.latestExportProvenance;
+                    else if (project.exportManifest) details = project.exportManifest;
+
+                    if (details) {
+                        manifestPre.textContent = JSON.stringify(details, null, 2);
+                        manifestPre.classList.remove('hidden');
+                        if (btn) btn.textContent = 'Hide Source Info ▴';
+                        // allow collapsing by clicking the button
+                        if (btn) {
+                            btn.onclick = () => {
+                                if (manifestPre.classList.contains('hidden')) {
+                                    manifestPre.classList.remove('hidden');
+                                    btn.textContent = 'Hide Source Info ▴';
+                                } else {
+                                    manifestPre.classList.add('hidden');
+                                    btn.textContent = 'Show Source Info ▾';
+                                }
+                            };
+                        }
+                    } else {
+                        // No structured details; hide pre and set button to show raw header if available
+                        if (manifestPre) manifestPre.classList.add('hidden');
+                        if (btn) {
+                            btn.onclick = () => {
+                                const headerEl = document.getElementById('project-header');
+                                if (headerEl && headerEl.textContent) {
+                                    alert(headerEl.textContent);
+                                } else {
+                                    alert('No source info available for this project');
+                                }
+                            };
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not populate export manifest details:', e);
+            }
         } catch (error) {
             console.error('❌ Error opening project:', error);
             this.showErrorMessage('Error opening project: ' + error.message);
@@ -2616,9 +2763,21 @@ class UIController {
             console.log('✅ Project approved:', this.currentProject.name);
             
             // Return to dashboard view
+            // Refresh projects from server and update UI so the dashboard shows approved status immediately
+            try {
+                await this.projectManager.loadProjects();
+                await this.refreshProjectsList();
+                // Refresh review/approved lists as well
+                this.refreshReviewProjectsList();
+                this.refreshApprovedProjectsList();
+            } catch (e) {
+                console.warn('Could not refresh projects after approval:', e);
+            }
+
+            // Small delay for UX then switch view
             setTimeout(() => {
                 this.showView('dashboard');
-            }, 2000);
+            }, 800);
         } catch (error) {
             console.error('❌ Error approving project:', error);
             this.showErrorMessage('Failed to approve project: ' + error.message);
