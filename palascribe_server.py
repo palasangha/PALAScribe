@@ -24,6 +24,16 @@ from io import BytesIO
 from datetime import datetime
 import threading
 
+# PDF generation
+try:
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Preformatted
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
+
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
@@ -327,6 +337,231 @@ def apply_pali_corrections(text):
     
     return corrected_text
 
+
+def write_provenance_header_text_file(output_path, metadata, text_body):
+    """
+    Write a transcription text file with a small inline JSON provenance header.
+    The header is delimited by explicit start/end markers so readers can
+    detect and parse it easily.
+    """
+    try:
+        # Use a user-friendly label and markers: 'Source Info'
+        start_marker = "---SOURCE-INFO-START---"
+        end_marker = "---SOURCE-INFO-END---"
+        header_json = json.dumps(metadata, indent=2, ensure_ascii=False)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(f"{start_marker}\n")
+            f.write(header_json)
+            f.write(f"\n{end_marker}\n\n")
+            f.write(text_body)
+
+        print(f"✅ Wrote transcription with provenance to: {output_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to write provenance file {output_path}: {e}")
+        return False
+
+
+def generate_pdf_with_provenance(output_pdf_path, metadata, text_body):
+    """Generate a simple PDF with a provenance first page and the transcription text.
+
+    Falls back to writing a plain text file if ReportLab is not available.
+    """
+    if not REPORTLAB_AVAILABLE:
+        print("⚠️ reportlab not available — falling back to writing a .txt with source-info header")
+        # fallback: write a .txt file next to desired pdf path with .txt extension
+        txt_path = str(Path(output_pdf_path).with_suffix('.txt'))
+        return write_provenance_header_text_file(txt_path, metadata, text_body)
+
+    try:
+        doc = SimpleDocTemplate(
+            output_pdf_path,
+            pagesize=A4,
+            rightMargin=20*mm,
+            leftMargin=20*mm,
+            topMargin=20*mm,
+            bottomMargin=20*mm,
+        )
+
+        styles = getSampleStyleSheet()
+        elems = []
+
+        # Provenance block
+        prov_json = json.dumps(metadata, indent=2, ensure_ascii=False)
+        elems.append(Paragraph("Source Info", styles['Heading2']))
+        elems.append(Preformatted(prov_json, styles['Code']))
+        elems.append(PageBreak())
+
+        # Transcription paragraphs
+        for para in text_body.split('\n\n'):
+            p = para.strip().replace('\n', ' ')
+            if p:
+                elems.append(Paragraph(p, styles['BodyText']))
+                elems.append(Spacer(1, 6))
+
+        doc.build(elems)
+        print(f"✅ Generated PDF with provenance: {output_pdf_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to generate PDF {output_pdf_path}: {e}")
+        return False
+
+
+def regenerate_pdf_for_project(db_manager, project_id, transcription_text, editor=None, change_summary=None, model=None):
+    """Regenerate and archive PDF for a project in the background.
+
+    Saves files under `exports/{project_id}/` and keeps versioned archives.
+    Also maintains a simple `index.json` manifest in that folder.
+    """
+    try:
+        if not transcription_text or not str(transcription_text).strip():
+            print(f"ℹ️ No transcription text provided for project {project_id}; skipping PDF regeneration")
+            return False
+
+        project = db_manager.get_project(project_id)
+        if not project:
+            print(f"❌ Project {project_id} not found for PDF regeneration")
+            return False
+
+        audio_path = project.get('audio_file_path') or project.get('audioFilePath')
+        base = None
+        if audio_path:
+            base = Path(audio_path).stem
+        else:
+            base = project.get('name') or project_id
+
+        exports_dir = Path('exports') / project_id
+        exports_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine next version number by scanning existing versioned PDFs
+        existing = []
+        for p in exports_dir.glob(f"{base}_v*.pdf"):
+            try:
+                stem = p.stem  # e.g., basename_v3
+                ver = int(stem.split('_v')[-1])
+                existing.append(ver)
+            except Exception:
+                continue
+
+        next_version = max(existing) + 1 if existing else 1
+
+        new_filename = f"{base}_v{next_version}.pdf"
+        new_path = exports_dir / new_filename
+        latest_path = exports_dir / f"{base}.pdf"
+
+        now = datetime.now().isoformat()
+
+        # Build metadata with history entry
+        index_path = exports_dir / 'index.json'
+        history = []
+        if index_path.exists():
+            try:
+                with open(index_path, 'r', encoding='utf-8') as f:
+                    idx = json.load(f)
+                    history = idx.get('history', [])
+            except Exception as e:
+                print(f"⚠️ Could not read existing export index: {e}")
+
+        entry = {
+            'version': next_version,
+            'file': new_filename,
+            'actor': editor or 'system',
+            'action': 'edit' if editor else 'auto',
+            'timestamp': now,
+            'note': change_summary or ''
+        }
+        history.append(entry)
+
+        # Try to get the original uploaded filename and optional source_path from the database if available
+        original_filename = ''
+        source_path_val = ''
+        try:
+            # DatabaseManager may provide recent audio info for the project
+            audio_rec = db_manager.get_latest_audio_for_project(project_id)
+            if audio_rec:
+                original_filename = audio_rec.get('original_name') or audio_rec.get('original_name') or ''
+                source_path_val = audio_rec.get('source_path') or ''
+        except Exception:
+            original_filename = ''
+            source_path_val = ''
+
+        metadata = {
+            'stored_filename': Path(audio_path).name if audio_path else '',
+            'original_filename': original_filename,
+            'original_path': str(audio_path) if audio_path else '',
+            'source_path': source_path_val,
+            'processing_model': model or project.get('processing_model') or '',
+            'version': next_version,
+            'last_edited_by': editor or 'system',
+            'last_edited_at': now,
+            'history': history
+        }
+
+        ok = generate_pdf_with_provenance(str(new_path), metadata, transcription_text)
+        if not ok:
+            print(f"❌ PDF generation failed for project {project_id}")
+            return False
+
+        # Write a per-version companion JSON manifest with full provenance
+        try:
+            companion_manifest_path = exports_dir / f"{base}_v{next_version}.json"
+            manifest_content = {
+                'project_id': project_id,
+                'pdf_file': new_filename,
+                'version': next_version,
+                'generated_at': now,
+                'generated_by': editor or 'system',
+                'processing_model': model or project.get('processing_model') or '',
+                'stored_filename': metadata.get('stored_filename', ''),
+                'original_filename': metadata.get('original_filename', ''),
+                'original_path': metadata.get('original_path', ''),
+                'source_path': metadata.get('source_path', ''),
+                'note': change_summary or '',
+                'history': history,
+                # include a short excerpt for quick inspection
+                'transcription_excerpt': (transcription_text[:1000] + '...') if transcription_text and len(transcription_text) > 1000 else transcription_text
+            }
+            with open(companion_manifest_path, 'w', encoding='utf-8') as mf:
+                json.dump(manifest_content, mf, indent=2, ensure_ascii=False)
+            # Add manifest filename to the history entry we just appended
+            if history and isinstance(history, list):
+                history[-1]['manifest'] = companion_manifest_path.name
+        except Exception as e:
+            print(f"⚠️ Could not write companion manifest: {e}")
+
+        # Update the project's DB record to embed the latest provenance
+        try:
+            db_manager.update_project(project_id, {'export_provenance': json.dumps(manifest_content, ensure_ascii=False)})
+            print(f"✅ Stored latest export provenance in DB for project {project_id}")
+        except Exception as e:
+            print(f"⚠️ Could not update project's export_provenance in DB: {e}")
+
+        # Update latest copy
+        try:
+            shutil.copyfile(str(new_path), str(latest_path))
+        except Exception as e:
+            print(f"⚠️ Could not copy latest PDF: {e}")
+
+        # Update index manifest
+        try:
+            idx_content = {
+                'project_id': project_id,
+                'base': base,
+                'latest': latest_path.name,
+                'history': history
+            }
+            with open(index_path, 'w', encoding='utf-8') as f:
+                json.dump(idx_content, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Could not write export index.json: {e}")
+
+        print(f"✅ Regenerated PDF for project {project_id}: {new_path}")
+        return True
+    except Exception as e:
+        print(f"❌ Unexpected error regenerating PDF for project {project_id}: {e}")
+        return False
+
 class DatabaseManager:
     """Handles all database operations for projects and audio files"""
     
@@ -381,10 +616,90 @@ class DatabaseManager:
         # Create uploads directory
         uploads_dir = Path("uploads")
         uploads_dir.mkdir(exist_ok=True)
+        # DB migration: ensure source_path column exists on audio_files
+        try:
+            cursor.execute("PRAGMA table_info(audio_files)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if 'source_path' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE audio_files ADD COLUMN source_path TEXT")
+                    print("✅ Added 'source_path' column to audio_files table")
+                except Exception as me:
+                    print(f"⚠️ Could not add source_path column: {me}")
+        except Exception as e:
+            print(f"⚠️ Error checking audio_files schema: {e}")
         
         conn.commit()
         conn.close()
         print("✅ Database initialized")
+        # Ensure projects table has an export_provenance column for DB-embedded provenance
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(projects)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if 'export_provenance' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN export_provenance TEXT")
+                    print("✅ Added 'export_provenance' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add export_provenance column: {me}")
+
+            # Backfill export_provenance from existing exports/*/index.json if present
+            try:
+                exports_root = Path('exports')
+                if exports_root.exists() and exports_root.is_dir():
+                    for proj_dir in exports_root.iterdir():
+                        if not proj_dir.is_dir():
+                            continue
+                        idx_path = proj_dir / 'index.json'
+                        if not idx_path.exists():
+                            continue
+                        try:
+                            with open(idx_path, 'r', encoding='utf-8') as f:
+                                idx = json.load(f)
+                            history = idx.get('history', [])
+                            if history:
+                                latest = history[-1]
+                                manifest_name = latest.get('manifest') or latest.get('manifest_file')
+                                if manifest_name:
+                                    manifest_path = proj_dir / manifest_name
+                                    if manifest_path.exists():
+                                        with open(manifest_path, 'r', encoding='utf-8') as mf:
+                                            manifest_json = json.load(mf)
+                                            project_id = idx.get('project_id') or proj_dir.name
+                                            # Only update if project exists in DB
+                                            cursor.execute('SELECT id FROM projects WHERE id = ?', (project_id,))
+                                            if cursor.fetchone():
+                                                cursor.execute('UPDATE projects SET export_provenance = ? WHERE id = ?', (json.dumps(manifest_json, ensure_ascii=False), project_id))
+                                                print(f"✅ Backfilled export_provenance for project {project_id}")
+                        except Exception as e:
+                            print(f"⚠️ Could not backfill provenance for {proj_dir}: {e}")
+            except Exception as e:
+                print(f"⚠️ Error scanning exports for backfill: {e}")
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"⚠️ Error during export_provenance migration/backfill: {e}")
+
+    def get_latest_audio_for_project(self, project_id):
+        """Return the latest audio_files record for a project, or None."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''SELECT * FROM audio_files WHERE project_id = ? ORDER BY created DESC LIMIT 1''', (project_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return None
+            cols = [d[0] for d in cursor.description]
+            result = dict(zip(cols, row))
+            conn.close()
+            return result
+        except Exception as e:
+            print(f"⚠️ Error fetching audio record for project {project_id}: {e}")
+            return None
     
     def create_project(self, name, assigned_to=""):
         """Create a new project with unique name handling"""
@@ -461,7 +776,7 @@ class DatabaseManager:
         for field, value in updates.items():
             if field in ['name', 'assigned_to', 'status', 'transcription', 'formatted_text', 
                         'edited_text', 'rich_content', 'word_count', 'processing_time', 
-                        'is_preview', 'error_message', 'audio_file_name', 'audio_file_path']:
+                        'is_preview', 'error_message', 'audio_file_name', 'audio_file_path', 'export_provenance']:
                 update_fields.append(f"{field} = ?")
                 values.append(value)
         
@@ -504,7 +819,7 @@ class DatabaseManager:
         
         print(f"✅ Deleted project {project_id}")
     
-    def save_audio_file(self, project_id, file_data, original_name, mime_type):
+    def save_audio_file(self, project_id, file_data, original_name, mime_type, source_path=None):
         """Save audio file to disk and update project"""
         # Create unique filename
         file_extension = Path(original_name).suffix
@@ -520,13 +835,22 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Insert audio file record
-        cursor.execute('''
-            INSERT INTO audio_files (id, project_id, original_name, file_path, 
-                                   file_size, mime_type, created)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (file_id, project_id, original_name, str(file_path), 
-              len(file_data), mime_type, datetime.now().isoformat()))
+        # Insert audio file record (include optional source_path)
+        try:
+            cursor.execute('''
+                INSERT INTO audio_files (id, project_id, original_name, file_path, source_path, 
+                                       file_size, mime_type, created)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (file_id, project_id, original_name, str(file_path), source_path,
+                  len(file_data), mime_type, datetime.now().isoformat()))
+        except Exception:
+            # Fallback if the column doesn't exist for some reason
+            cursor.execute('''
+                INSERT INTO audio_files (id, project_id, original_name, file_path, 
+                                       file_size, mime_type, created)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (file_id, project_id, original_name, str(file_path), 
+                  len(file_data), mime_type, datetime.now().isoformat()))
         
         # Update project with audio info
         cursor.execute('''
@@ -562,7 +886,8 @@ class DatabaseManager:
             'word_count': 'wordCount',
             'processing_time': 'processingTime',
             'is_preview': 'isPreview',
-            'error_message': 'errorMessage'
+            'error_message': 'errorMessage',
+            'export_provenance': 'exportProvenance'
         }
         
         # Create new project dict with camelCase field names
@@ -790,6 +1115,172 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             if project:
                 print(f"✅ Found project: {project.get('name', 'Unnamed')}")
                 print(f"📋 Project audio data: audioFilePath={project.get('audioFilePath')}, audioUrl={project.get('audioUrl')}")
+                # If an exports manifest exists for this project, include the
+                # latest provenance metadata so the client can show the header
+                try:
+                    exports_dir = Path('exports') / project_id
+                    exports_index = exports_dir / 'index.json'
+                    if exports_index.exists():
+                        with open(exports_index, 'r', encoding='utf-8') as f:
+                            idx = json.load(f)
+                            # Attach latest history entry and manifest to response
+                            project['exportManifest'] = {
+                                'latest': idx.get('latest'),
+                                'history': idx.get('history', [])
+                            }
+
+                            # Prefer DB-embedded provenance if present on the project
+                            try:
+                                db_prov = project.get('exportProvenance') or project.get('export_provenance')
+                                if db_prov:
+                                    if isinstance(db_prov, str):
+                                        try:
+                                            parsed = json.loads(db_prov)
+                                            project['latestExportProvenance'] = parsed
+                                            project['latestExportInfo'] = parsed
+                                            # Also provide a short human-readable header
+                                            try:
+                                                project['exportHeaderText'] = f"Project: {project.get('name')}\nAudio: {parsed.get('original_filename') or ''}\nExport: {parsed.get('pdf_file') or parsed.get('latest') or ''}"
+                                            except Exception:
+                                                pass
+                                            # Skip filesystem scanning
+                                            manifest_loaded = True
+                                        except Exception:
+                                            # stored value is not JSON, ignore and continue to filesystem
+                                            manifest_loaded = False
+                                    elif isinstance(db_prov, dict):
+                                        project['latestExportProvenance'] = db_prov
+                                        project['latestExportInfo'] = db_prov
+                                        project['exportHeaderText'] = f"Project: {project.get('name')}\nAudio: {db_prov.get('original_filename') or ''}\nExport: {db_prov.get('pdf_file') or db_prov.get('latest') or ''}"
+                                        manifest_loaded = True
+                                else:
+                                    manifest_loaded = False
+                            except Exception as e:
+                                print(f"⚠️ Error checking DB-embedded provenance: {e}")
+
+                            # If DB provenance not present, try per-version companion JSON manifests if present
+                            manifest_loaded = manifest_loaded if 'manifest_loaded' in locals() else False
+                            if not manifest_loaded:
+                                manifest_loaded = False
+                                history = idx.get('history', [])
+                                if history:
+                                    latest_entry = history[-1]
+                                    manifest_name = latest_entry.get('manifest') or latest_entry.get('manifest_file')
+                                    if manifest_name:
+                                        manifest_path = exports_dir / manifest_name
+                                        try:
+                                            if manifest_path.exists():
+                                                with open(manifest_path, 'r', encoding='utf-8') as mf:
+                                                    manifest_json = json.load(mf)
+                                                    project['latestExportProvenance'] = manifest_json
+                                                    project['latestExportInfo'] = manifest_json
+                                                    manifest_loaded = True
+                                        except Exception as me:
+                                            print(f"⚠️ Could not read companion manifest {manifest_path}: {me}")
+
+                            # Try to read a companion provenance text file for the
+                            # latest version so the client can display full JSON metadata.
+                            base = idx.get('base') or Path(project.get('audioFilePath', '')).stem or project.get('name') or project_id
+                            latest_txt_candidates = []
+
+                            # Preferred: latest base.txt (latest copy)
+                            latest_txt_candidates.append(exports_dir / f"{base}.txt")
+
+                            # Next: versioned companion file based on history
+                            history = idx.get('history', [])
+                            if history:
+                                latest_entry = history[-1]
+                                latest_file = latest_entry.get('file')
+                                if latest_file:
+                                    latest_txt_candidates.append(exports_dir / Path(latest_file).with_suffix('.txt'))
+
+                            # Also try any *_vN.txt files matching base
+                            latest_txt_candidates.extend(list(exports_dir.glob(f"{base}_v*.txt")))
+
+                            latest_prov = None
+                            for cand in latest_txt_candidates:
+                                try:
+                                    if cand and cand.exists():
+                                        with open(cand, 'r', encoding='utf-8') as pf:
+                                            content = pf.read()
+                                            # Try new marker first, fall back to old 'PROVENANCE' marker
+                                            start_marker = '---SOURCE-INFO-START---'
+                                            end_marker = '---SOURCE-INFO-END---'
+                                            old_start = '---PROVENANCE-START---'
+                                            old_end = '---PROVENANCE-END---'
+
+                                            # Check for new markers
+                                            if start_marker in content and end_marker in content:
+                                                try:
+                                                    start = content.index(start_marker) + len(start_marker)
+                                                    end = content.index(end_marker)
+                                                    header_text = content[start:end].strip()
+                                                    latest_prov = json.loads(header_text)
+                                                    project['latestExportProvenance'] = latest_prov
+                                                    project['latestExportInfo'] = latest_prov
+                                                    break
+                                                except Exception as je:
+                                                    print(f"⚠️ Could not parse source-info JSON in {cand}: {je}")
+                                            else:
+                                                # Try old markers if present
+                                                if old_start in content and old_end in content:
+                                                    try:
+                                                        start = content.index(old_start) + len(old_start)
+                                                        end = content.index(old_end)
+                                                        header_text = content[start:end].strip()
+                                                        latest_prov = json.loads(header_text)
+                                                        project['latestExportProvenance'] = latest_prov
+                                                        project['latestExportInfo'] = latest_prov
+                                                        break
+                                                    except Exception as je:
+                                                        print(f"⚠️ Could not parse old provenance JSON in {cand}: {je}")
+
+                                                # As a last resort try to parse whole file as JSON
+                                                    try:
+                                                        maybe = json.loads(content)
+                                                        project['latestExportProvenance'] = maybe
+                                                        project['latestExportInfo'] = maybe
+                                                        latest_prov = maybe
+                                                        break
+                                                    except Exception:
+                                                        # Not JSON — but the file may be a plain text header.
+                                                        # Attach the raw content as `exportHeaderText` so the
+                                                        # UI can display the human-readable header immediately.
+                                                        try:
+                                                            project['exportHeaderText'] = content
+                                                            latest_prov = None
+                                                            break
+                                                        except Exception:
+                                                            continue
+                                except Exception as e:
+                                    print(f"⚠️ Error reading candidate provenance file {cand}: {e}")
+
+                            if not latest_prov:
+                                # Build a minimal fallback provenance from index.json and DB audio record
+                                try:
+                                    audio_rec = self.db_manager.get_latest_audio_for_project(project_id)
+                                except Exception:
+                                    audio_rec = None
+
+                                fallback = {
+                                    'project_id': project_id,
+                                    'base': base,
+                                    'latest': idx.get('latest'),
+                                    'history': idx.get('history', []),
+                                    'original_filename': audio_rec.get('original_name') if audio_rec else '',
+                                    'source_path': audio_rec.get('source_path') if audio_rec else ''
+                                }
+                                project['latestExportProvenance'] = fallback
+                                # Also provide a small human-readable header for immediate display
+                                try:
+                                    header_lines = [f"Project: {project.get('name')}", f"Audio: {fallback.get('original_filename') or ''}", f"Export: {fallback.get('latest')}"]
+                                    project['exportHeaderText'] = "\n".join([l for l in header_lines if l])
+                                except Exception:
+                                    project['exportHeaderText'] = ''
+                                print(f"ℹ️ Attached fallback provenance for project {project_id}")
+                except Exception as e:
+                    print(f"⚠️ Could not read exports manifest for project {project_id}: {e}")
+
                 self.send_json_response(project)
             else:
                 print(f"❌ Project {project_id} not found")
@@ -854,6 +1345,65 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 return
             
             project = self.db_manager.create_project(name, assigned_to)
+            # Also create a simple exports header so the UI can show project
+            # header information immediately (no transcription needed).
+            try:
+                exports_dir = Path('exports') / project['id']
+                exports_dir.mkdir(parents=True, exist_ok=True)
+
+                # Sanitize base name for files
+                base = project.get('name') or project['id']
+                base_safe = re.sub(r'[^A-Za-z0-9_.-]', '_', base)
+
+                created_dt = project.get('created') or datetime.now().isoformat()
+                date_created = created_dt.split('T')[0] if 'T' in created_dt else created_dt
+                date_exported = datetime.now().strftime('%Y-%m-%d')
+
+                header_lines = []
+                header_lines.append('Project:')
+                header_lines.append(project.get('name') or '')
+                header_lines.append('Assigned to:')
+                header_lines.append(project.get('assignedTo') or 'Unassigned')
+                header_lines.append('Audio File:')
+                header_lines.append(project.get('audioFileName') or 'No audio')
+                header_lines.append('Date Created:')
+                header_lines.append(date_created)
+                header_lines.append('Date Exported:')
+                header_lines.append(date_exported)
+                header_lines.append('Word Count:')
+                header_lines.append('0')
+                header_lines.append('Character Count:')
+                header_lines.append('0')
+
+                header_text = '\n'.join(header_lines)
+
+                header_path = exports_dir / f"{base_safe}_header.txt"
+                with open(header_path, 'w', encoding='utf-8') as hf:
+                    hf.write(header_text)
+
+                # Create a minimal index.json referencing this header so GET /projects
+                # can discover it via exports/index.json
+                index_path = exports_dir / 'index.json'
+                idx_content = {
+                    'project_id': project['id'],
+                    'base': base_safe,
+                    'latest': header_path.name,
+                    'history': [
+                        {
+                            'version': 0,
+                            'file': header_path.name,
+                            'actor': 'system',
+                            'action': 'create',
+                            'timestamp': datetime.now().isoformat(),
+                            'note': 'Initial project header'
+                        }
+                    ]
+                }
+                with open(index_path, 'w', encoding='utf-8') as jf:
+                    json.dump(idx_content, jf, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"⚠️ Could not write initial export header for project {project.get('id')}: {e}")
+
             self.send_json_response(project, status=201)
             
         except Exception as e:
@@ -897,6 +1447,35 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             project = self.db_manager.get_project(project_id)
             if project:
                 self.send_json_response(project)
+                # Trigger PDF regeneration when transcription or edited text changes,
+                # or when status transitions to 'ready'. Run in background.
+                try:
+                    should_regen = False
+                    if 'transcription' in converted_data or 'edited_text' in converted_data:
+                        should_regen = True
+                    if converted_data.get('status') == 'ready':
+                        should_regen = True
+
+                    if should_regen:
+                        # Determine transcription text to use
+                        transcription_text = converted_data.get('transcription') or converted_data.get('edited_text') or project.get('transcription') or project.get('editedText') or ''
+                        editor = None
+                        # Accept optional editor field from client (camelCase)
+                        if 'editedBy' in data:
+                            editor = data.get('editedBy')
+                        elif 'editor' in data:
+                            editor = data.get('editor')
+
+                        change_summary = data.get('changeSummary') or data.get('note') or None
+                        model = converted_data.get('processing_model') or None
+
+                        threading.Thread(
+                            target=regenerate_pdf_for_project,
+                            args=(self.db_manager, project_id, transcription_text, editor, change_summary, model),
+                            daemon=True
+                        ).start()
+                except Exception as e:
+                    print(f"⚠️ Failed to start background PDF regeneration: {e}")
             else:
                 self.send_error_response(404, "Project not found")
                 
@@ -953,6 +1532,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             audio_data = None
             filename = None
+            source_path = None
             
             for i, part in enumerate(parts):
                 print(f"🔍 Processing part {i}: {len(part)} bytes")
@@ -972,6 +1552,18 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                             audio_data = audio_data.split(b'\r\n--')[0]
                         print(f"📄 Extracted audio data: {len(audio_data)} bytes")
                     break
+                # Also accept optional sourcePath field (plain text)
+                if b'Content-Disposition: form-data; name="sourcePath"' in part:
+                    try:
+                        if b'\r\n\r\n' in part:
+                            raw = part.split(b'\r\n\r\n', 1)[1]
+                            if b'\r\n--' in raw:
+                                raw = raw.split(b'\r\n--')[0]
+                            source_path = raw.decode('utf-8', errors='ignore').strip()
+                            print(f"📎 Extracted sourcePath: {source_path}")
+                    except Exception as e:
+                        print(f"⚠️ Could not parse sourcePath part: {e}")
+                    continue
             
             if not audio_data or not filename:
                 print(f"❌ Multipart parsing failed - audio_data: {bool(audio_data)}, filename: {filename}")
@@ -981,7 +1573,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             # Save audio file
             print(f"💾 Attempting to save audio file: {filename} ({len(audio_data)} bytes)")
             mime_type = "audio/mpeg"  # Default, could be detected
-            file_path = self.db_manager.save_audio_file(project_id, audio_data, filename, mime_type)
+            file_path = self.db_manager.save_audio_file(project_id, audio_data, filename, mime_type, source_path=source_path)
             print(f"✅ Audio file saved to: {file_path}")
             
             # Update project status
@@ -991,11 +1583,18 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             })
             
             print(f"📤 Sending success response for audio upload")
-            self.send_json_response({
+            # Return additional info including stored original name and optional source_path
+            audio_rec = self.db_manager.get_latest_audio_for_project(project_id)
+            resp = {
                 "message": "Audio file uploaded successfully",
                 "file_path": file_path,
                 "filename": filename
-            })
+            }
+            if audio_rec:
+                resp['original_name'] = audio_rec.get('original_name')
+                resp['source_path'] = audio_rec.get('source_path') if 'source_path' in audio_rec else ''
+
+            self.send_json_response(resp)
             
         except Exception as e:
             print(f"❌ Audio upload error: {e}")
@@ -1145,7 +1744,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             if not file_path.exists():
                 self.send_error(404, "Audio file not found")
                 return
-            
+
             # Determine content type
             extension = file_path.suffix.lower()
             content_types = {
@@ -1155,19 +1754,40 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 '.ogg': 'audio/ogg'
             }
             content_type = content_types.get(extension, 'audio/mpeg')
-            
+
             # Send file
             self.send_response(200)
             self.send_header('Content-Type', content_type)
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Length', str(file_path.stat().st_size))
             self.end_headers()
-            
+
             with open(file_path, 'rb') as f:
-                shutil.copyfileobj(f, self.wfile)
-                
+                try:
+                    shutil.copyfileobj(f, self.wfile)
+                except (BrokenPipeError, ConnectionResetError) as conn_err:
+                    # Client disconnected while streaming audio; log and stop quietly.
+                    print(f"⚠️ Client disconnected during audio streaming: {conn_err}")
+                    return
+                except OSError as oe:
+                    # Treat EPIPE (broken pipe) as client disconnect on some platforms
+                    if getattr(oe, 'errno', None) in (32,):
+                        print(f"⚠️ Socket error during streaming (treated as client disconnect): {oe}")
+                        return
+                    raise
+
         except Exception as e:
-            self.send_error(500, str(e))
+            # If the client disconnected (BrokenPipe/ConnectionReset), don't try to
+            # write an error response which will also fail with BrokenPipe.
+            if isinstance(e, (BrokenPipeError, ConnectionResetError)):
+                print(f"⚠️ Client disconnected before error handling: {e}")
+                return
+            # Other exceptions should return a 500 to the client if possible
+            try:
+                self.send_error(500, str(e))
+            except Exception:
+                # If sending the error also fails (e.g., broken pipe), just log it.
+                print(f"❌ Failed to send error response after exception: {e}")
     
     def handle_audio_processing(self):
         """Handle Whisper audio processing (original functionality)"""
@@ -1596,9 +2216,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     else:
                         print(f"❌ SRT file not found: {srt_file}")
             
-            # Initialize formatted_text as fallback
+                # Initialize formatted_text as fallback
             formatted_text = transcription
-            
+
             if transcription.strip():
                 print(f"📝 Generated transcription: {word_count} words")
                 
@@ -1614,14 +2234,83 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 # Apply text formatting as post-processing
                 print("📄 Applying text formatting...")
                 formatted_text = format_transcription_text(transcription)
-                
-                # Clean up text file
+
+                # Always prepare a provenance metadata block and prepend it to
+                # the transcription and formatted_text returned to the client.
                 try:
-                    if os.path.exists(text_file):
-                        os.unlink(text_file)
-                        print(f"🗑️ Cleaned up text file: {text_file}")
+                    # Try to get original uploaded filename from DB (if available)
+                    original_filename = ''
+                    stored_filename = Path(audio_file_path).name if audio_file_path else ''
+                    try:
+                        if project_id:
+                            audio_rec = self.db_manager.get_latest_audio_for_project(project_id)
+                            if audio_rec:
+                                original_filename = audio_rec.get('original_name') or ''
+                    except Exception:
+                        original_filename = ''
+
+                    provenance_meta = {
+                        "stored_filename": stored_filename,
+                        "original_filename": original_filename,
+                        "original_path": str(audio_file_path) if audio_file_path else '',
+                        "whisper_model": model,
+                        "processing_time_seconds": processing_time,
+                        "transcription_version": 1,
+                        "created_at": datetime.now().isoformat()
+                    }
+
+                    start_marker = "---SOURCE-INFO-START---"
+                    end_marker = "---SOURCE-INFO-END---"
+                    header_json = json.dumps(provenance_meta, indent=2, ensure_ascii=False)
+                    header_block = f"{start_marker}\n{header_json}\n{end_marker}\n\n"
+
+                    # Prepend header to both returned transcription and formatted text
+                    transcription = header_block + transcription
+                    formatted_text = header_block + formatted_text
                 except Exception as e:
-                    print(f"❌ Error cleaning up {text_file}: {e}")
+                    print(f"⚠️ Could not prepare inline provenance header: {e}")
+
+                # Generate a PDF with a provenance first page and the transcription
+                try:
+                    pdf_path = Path(audio_file_path).with_suffix('.pdf')
+                    metadata = provenance_meta
+
+                    generated = generate_pdf_with_provenance(str(pdf_path), metadata, transcription)
+
+                    # If Whisper produced a separate text file (text_file) in the
+                    # working directory, remove it to avoid duplicates.
+                    try:
+                        if os.path.exists(text_file):
+                            os.unlink(text_file)
+                            print(f"🗑️ Cleaned up temp text file: {text_file}")
+                    except Exception as e:
+                        print(f"❌ Error cleaning up temp file {text_file}: {e}")
+
+                    if generated:
+                        # Also write a companion plain-text file that contains
+                        # the inline provenance header followed by the transcription
+                        # so that downloads and API responses can include the header.
+                        try:
+                            prov_txt_path = pdf_path.with_suffix('.txt')
+                            ok_txt = write_provenance_header_text_file(str(prov_txt_path), metadata, transcription)
+                            if ok_txt:
+                                # Read back the file and replace the in-memory
+                                # transcription so the API response includes the header
+                                try:
+                                    with open(prov_txt_path, 'r', encoding='utf-8') as pf:
+                                        transcription = pf.read()
+                                except Exception as re:
+                                    print(f"⚠️ Could not read written provenance text file: {re}")
+                        except Exception as e:
+                            print(f"⚠️ Could not write companion provenance text file: {e}")
+
+                        text_file = str(pdf_path)
+                    else:
+                        # Fallback: keep the original text result in memory and
+                        # return it without a saved PDF path.
+                        print("⚠️ PDF generation failed; returning transcription in-memory")
+                except Exception as e:
+                    print(f"❌ Error while generating final PDF with provenance: {e}")
             
             # If transcription is empty, treat as error
             if not transcription.strip():
@@ -1646,6 +2335,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 "formatted_text": formatted_text,  # Now contains properly formatted text
                 "word_count": word_count,
                 "processing_time": processing_time,
+                "output_file": text_file,
                 "model": model,
                 "language": language,
                 "preview_mode": preview_mode
