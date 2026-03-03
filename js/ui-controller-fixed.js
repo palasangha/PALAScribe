@@ -1801,11 +1801,29 @@ class UIController {
             // Display processing model if available
             const modelDisplay = document.getElementById('processing-model-display');
             const modelName = document.getElementById('model-name');
-            const model = project.processingModel || project.processing_model;
-            if (modelDisplay && modelName && model) {
-                modelName.textContent = model;
+            let modelText = '';
+            
+            // Try to parse model info as JSON first (new format with provider, model, language)
+            try {
+                const modelInfo = JSON.parse(project.processing_model || project.processingModel || '{}');
+                if (modelInfo.provider || modelInfo.model) {
+                    modelText = `${modelInfo.provider || 'OpenAI Whisper'} - ${modelInfo.model}`;
+                    if (modelInfo.language) {
+                        modelText += ` (${modelInfo.language})`;
+                    }
+                }
+            } catch (e) {
+                // Fallback to simple string if not JSON
+                modelText = project.processing_model || project.processingModel;
+            }
+            
+            console.log('🔍 Model check - raw:', project.processing_model || project.processingModel, 'parsed:', modelText);
+            if (modelDisplay && modelName && modelText) {
+                console.log('✅ Displaying model:', modelText);
+                modelName.textContent = modelText;
                 modelDisplay.classList.remove('hidden');
             } else if (modelDisplay) {
+                console.log('⚠️ No model to display');
                 modelDisplay.classList.add('hidden');
             }
 

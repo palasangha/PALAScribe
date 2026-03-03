@@ -2427,7 +2427,11 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     'transcript_segments': json.dumps(result.get('segments', []), ensure_ascii=False),
                     'word_count': result.get('word_count', 0),
                     'processing_time': result.get('processing_time', 0),
-                    'processing_model': model,
+                    'processing_model': json.dumps({
+                        'provider': 'OpenAI Whisper',
+                        'model': model,
+                        'language': language
+                    }),
                     'status': 'Needs_Review'  # Set to ready for review status
                 })
                 print(f"✅ Transcription completed for project {project_id}")
