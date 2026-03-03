@@ -1068,7 +1068,7 @@
     pointer-events: none !important;
 }
 
-/* Review View Layout Fixes */
+/* Review View Layout Fixes - simplified since body handles it */
 #view-review {
     position: fixed !important;
     top: 0 !important;
@@ -1076,17 +1076,25 @@
     right: 0 !important;
     bottom: 0 !important;
     z-index: 40 !important;
-    background: white !important;
+    background: #f9fafb !important;
     overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 #view-review.hidden {
     display: none !important;
+    position: fixed !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
 }
 
-/* Override main container constraints for review view */
 #view-review > .flex-1 {
     flex: 1 !important;
     min-height: 0 !important;
@@ -1145,15 +1153,15 @@
     pointer-events: auto;
 }
 
-/* Export PDF button specific styling */
+/* Export PDF button specific styling - subtle gray like other buttons */
 #btn-export-pdf {
-    background-color: #dc2626 !important;
-    color: white !important;
-    border: 1px solid #b91c1c !important;
+    background-color: #ffffff !important;
+    color: #4b5563 !important;
+    border: 1px solid #d1d5db !important;
 }
 
 #btn-export-pdf:hover {
-    background-color: #b91c1c !important;
+    background-color: #f9fafb !important;
 }
 
 /* Preview section styling */

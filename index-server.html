@@ -5,9 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PalaScribe - VRI Transcription Service</title>
     <link rel="stylesheet" href="css/tailwind-minimal.css?v=20250729a">
-    <link rel="stylesheet" href="css/styles.css?v=20260302n">
+    <link rel="stylesheet" href="css/styles.css?v=20260303p">
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50">
+    <style>
+        /* === ABSOLUTE CORE FIX === */
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+        }
+        
+        body {
+            overflow: visible !important;
+            min-height: 0 !important;  /* Don't force min height - let content dictate */
+        }
+        
+        /* === REVIEW VIEW OVERLAY === */
+        /* Review view is ALWAYS fixed - never part of normal flow */
+        #view-review {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 40 !important;
+        }
+        
+        /* When visible: full screen */
+        #view-review:not(.hidden) {
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: white !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        /* When hidden: take absolutely no space */
+        #view-review.hidden {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+        
+        /* Prevent body scroll when review is open */
+        body:has(#view-review:not(.hidden)) {
+            overflow: hidden !important;
+            height: 100vh !important;
+        }
+    </style>
     <!-- Header -->
     <header class="header-bar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -155,7 +204,7 @@
     </div>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8" style="padding-bottom: 0; margin-bottom: 0;">
         
         <!-- Dashboard View -->
         <div id="view-dashboard" class="view-content">
@@ -279,71 +328,65 @@
         </div>
 
         <!-- Review/Edit View -->
-        <div id="view-review" class="view-content hidden">
-            <!-- Review Header -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200" style="margin-top: 24px; margin-bottom: 20px;">
-                <div class="px-8 py-5">
-                    <div class="flex justify-between items-start">
-                        <div class="flex items-start space-x-6">
-                            <div id="review-project-info" class="flex flex-col space-y-2">
-                                <!-- Project name and status -->
-                                <div class="flex items-center space-x-3">
-                                    <h1 class="text-2xl font-semibold text-gray-900" style="letter-spacing: -0.02em;">Project Review</h1>
-                                    <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-medium border border-blue-100">Review Mode</span>
-                                </div>
-                                <div>
-                                    <div id="project-header" class="text-sm text-gray-600"></div>
-                                    <button id="btn-show-source-info" class="text-xs text-blue-600 hover:text-blue-800 mt-1.5 transition-colors" style="background:none;border:none;padding:0;cursor:pointer;">Show Source Info ▾</button>
-                                    <pre id="export-manifest-details" class="hidden mt-2 p-3 text-xs bg-gray-50 border border-gray-200 rounded-lg max-h-48 overflow-auto" style="white-space:pre-wrap;"></pre>
-                                </div>
+        <div id="view-review" class="view-content hidden" style="display: flex !important; flex-direction: column; width: 100%; height: 100%; padding: 0; margin: 0; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 40; background: #f9fafb; overflow: hidden;">
+            <!-- Compact Review Header -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200" style="flex-shrink: 0; margin: 16px 16px 0 16px; padding: 0;">
+                <div class="px-6 py-3">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-4">
+                            <button id="btn-back-to-dashboard" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md transition-colors flex items-center space-x-2 border border-gray-300 text-sm font-medium">
+                                <span>←</span>
+                                <span>Back</span>
+                            </button>
+                            <div class="h-5 w-px bg-gray-300"></div>
+                            <div id="review-project-info" class="flex items-center space-x-4">
+                                <!-- Project name and status will be inserted here with better spacing -->
                             </div>
                         </div>
                         
-                        <!-- Action Buttons -->
-                        <div class="flex items-center space-x-3">
-                            <button id="btn-back-to-dashboard" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-2.5 rounded-lg transition-all flex items-center space-x-2 border border-gray-300 font-medium">
-                                <span>←</span>
-                                <span>Back to Dashboard</span>
-                            </button>
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-show-source-info" class="text-xs text-gray-500 hover:text-gray-700 transition-colors" style="background:none;border:none;padding:4px 8px;cursor:pointer;">Source Info ▾</button>
                         </div>
                     </div>
+                    <pre id="export-manifest-details" class="hidden mt-2 p-3 text-xs bg-gray-50 border border-gray-200 rounded-lg max-h-48 overflow-auto" style="white-space:pre-wrap;"></pre>
+                    <div id="project-header" class="hidden text-xs text-gray-500 mt-1"></div>
                 </div>
             </div>
 
             <!-- Two-Column Split View -->
-            <div style="display: flex; gap: 16px; height: calc(100vh - 280px); min-height: 500px; max-height: calc(100vh - 280px);">
-                <!-- Left Panel: Transcript Timeline (Dark) -->
-                <div style="width: 360px; background: #eef3f8; color: #1f2937; display: flex; flex-direction: column; border-radius: 8px; box-shadow: 0 8px 20px rgba(15,23,42,0.12); overflow: hidden; border: 1px solid #dbe3ee;">
-                    <div style="padding: 12px 16px; background: #e7edf5; border-bottom: 1px solid #d6e0ec;">
-                        <h2 style="font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #334155;">📋 Transcript Timeline</h2>
-                        <input id="transcript-search" type="text" placeholder="Search segments..." style="width: 100%; padding: 8px 12px; font-size: 13px; background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px;" />
+            <div style="display: flex; gap: 16px; flex: 1; margin: 16px 16px 0 0; overflow: hidden; min-height: 0;">
+                <!-- Left Panel: Transcript Timeline -->
+                <div style="width: 360px; margin-left: 16px; background: #eef3f8; color: #1f2937; display: flex; flex-direction: column; border-radius: 8px; box-shadow: 0 4px 12px rgba(15,23,42,0.08); overflow: hidden; border: 1px solid #dbe3ee;">
+                    <div style="padding: 12px 20px; background: #e7edf5; border-bottom: 1px solid #d6e0ec;">
+                        <h2 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #475569;">📋 Transcript Timeline</h2>
+                        <input id="transcript-search" type="text" placeholder="Search segments..." style="width: 100%; padding: 7px 12px; font-size: 13px; background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px;" />
                     </div>
                     
-                    <div id="review-audio-player" style="padding: 10px 12px; border-bottom: 1px solid #d6e0ec; background: #f4f7fb;">
+                    <div id="review-audio-player" style="padding: 10px 20px; border-bottom: 1px solid #d6e0ec; background: #f4f7fb;">
                         <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #64748b;">
                             <span style="font-size: 15px;">🎵</span>
                             <span>Audio player loading...</span>
                         </div>
                     </div>
                     
-                    <div id="transcript-segments-list" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;"></div>
+                    <div id="transcript-segments-list" style="flex: 1; overflow-y: auto; padding: 12px 16px 12px 20px; display: flex; flex-direction: column; gap: 8px;"></div>
                     
-                    <div style="padding: 8px 12px; border-top: 1px solid #d6e0ec; background: #e7edf5; color: #64748b; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                    <div style="padding: 8px 20px; border-top: 1px solid #d6e0ec; background: #e7edf5; color: #64748b; font-size: 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                         <input id="transcript-sync-toggle" type="checkbox" style="width: 16px; height: 16px; cursor: pointer;" checked />
                         <span>Sync to audio</span>
                     </div>
                 </div>
 
-                <!-- Right Panel: Text Editor (White) -->
-                <div style="flex: 1; background: white; display: flex; flex-direction: column; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden;">
-                    <div style="padding: 12px 24px; border-color: #e5e7eb; background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
-                        <h2 style="font-size: 14px; font-weight: 700; color: #1f2937;">✏️ Transcription Editor</h2>
-                        <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Click to edit or use the segment timeline to review</p>
+                <!-- Right Panel: Text Editor -->
+                <div style="flex: 1; background: white; display: flex; flex-direction: column; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; margin-right: 16px;">
+                    <div style="padding: 12px 20px; border-color: #e5e7eb; background: #f9fafb; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;">
+                        <h2 style="font-size: 13px; font-weight: 600; color: #475569;">✏️ Transcription Editor</h2>
+                        <p style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Click to edit or use the segment timeline to review</p>
                     </div>
                     
                     <div id="transcription-editor" 
                         contenteditable="true" 
-                        style="flex: 1; overflow-y: auto; border: none; padding: 24px; font-size: 14px; line-height: 1.6; background: white; color: #1f2937; outline: none; white-space: pre-wrap; word-wrap: break-word;">
+                        style="flex: 1; overflow-y: auto; border: none; padding: 20px 24px; font-size: 14px; line-height: 1.65; background: white; color: #1f2937; outline: none; white-space: pre-wrap; word-wrap: break-word; min-height: 0;">
                     </div>
                 </div>
             </div>
@@ -371,52 +414,40 @@
             <div id="transcription-preview" class="hidden"></div>
 
             <!-- Bottom Action Bar -->
-            <div id="bottom-action-bar" class="bg-white rounded-lg shadow-sm border border-gray-200 px-8 py-6 mt-8">
-                <div class="flex flex-wrap justify-between items-center gap-4">
-                    <div class="flex flex-wrap items-center gap-3">
-                        <button id="btn-reset-text" class="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 shadow-sm border border-gray-300 whitespace-nowrap">
+            <div id="bottom-action-bar" class="bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-3" style="flex-shrink: 0; margin: 16px; margin-bottom: 16px; padding: 12px 20px;">
+                <div class="flex justify-between items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <button id="btn-reset-text" class="bg-white hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm border border-gray-300">
                             <span>🔄</span>
-                            <span>Reset Text</span>
+                            <span>Reset</span>
                         </button>
-                        <button id="btn-mark-reviewed" class="bg-white hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 shadow-sm border border-blue-400 whitespace-nowrap" style="color: #1d4ed8;">
+                        <button id="btn-mark-reviewed" class="bg-white hover:bg-blue-50 px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm border border-blue-400" style="color: #1d4ed8;">
                             <span>✅</span>
-                            <span class="font-medium">Mark as Reviewed</span>
+                            <span>Mark as Reviewed</span>
                         </button>
-                        <button id="btn-approve-final" class="bg-white hover:bg-green-50 text-green-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 shadow-sm border border-green-300 whitespace-nowrap">
+                        <button id="btn-approve-final" class="bg-white hover:bg-green-50 text-green-700 px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm border border-green-300">
                             <span>✔️</span>
                             <span>Approve</span>
                         </button>
-                        <div class="h-6 w-px bg-gray-300"></div>
-                        <button id="btn-export-pdf" class="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2 shadow-sm border border-gray-300 whitespace-nowrap">
+                        <div class="h-5 w-px bg-gray-300 mx-1"></div>
+                        <button id="btn-export-pdf" class="bg-white hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 border border-gray-300 shadow-sm">
                             <span>📄</span>
-                            <span>Export PDF</span>
+                            <span>Save as PDF</span>
                         </button>
                     </div>
                     
-                    <div class="flex flex-wrap items-center gap-6 text-sm">
-                        <div class="flex items-center space-x-2 text-gray-600 bg-gray-50 px-4 py-2 rounded-lg whitespace-nowrap">
-                            <span class="text-blue-600">📝</span>
-                            <span class="font-medium">Words:</span>
+                    <div class="flex items-center gap-4 text-sm">
+                        <div class="flex items-center space-x-2 text-gray-600">
+                            <span class="text-gray-500">Words:</span>
                             <span id="word-count" class="font-semibold text-gray-800">0</span>
                         </div>
-                        <div class="flex items-center space-x-2 text-gray-600 bg-gray-50 px-4 py-2 rounded-lg whitespace-nowrap">
-                            <span class="text-green-600">🔤</span>
-                            <span class="font-medium">Characters:</span>
-                            <span id="char-count" class="font-semibold text-gray-800">0</span>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-4">
-                        <div id="audio-file-name" class="text-sm text-gray-600 italic whitespace-nowrap">No audio</div>
-                        <div id="processing-model-display" class="text-sm text-gray-600 bg-purple-50 px-3 py-1 rounded-lg border border-purple-200 hidden whitespace-nowrap">
-                            <span class="text-purple-700 font-medium">Model:</span> <span id="model-name" class="text-purple-900 font-semibold">-</span>
-                        </div>
-                        <div class="flex items-center space-x-2 bg-green-50 px-4 py-2 rounded-lg border border-green-200 whitespace-nowrap">
-                            <span class="text-green-600 font-semibold" id="auto-save-status">✓</span>
-                            <span class="text-green-700 font-medium">Auto-saved</span>
+                        <div id="processing-model-display" class="text-xs text-gray-600 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200 hidden">
+                            <span class="text-purple-700">Model:</span> <span id="model-name" class="text-purple-900 font-medium">-</span>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
     </main>
@@ -485,7 +516,7 @@
     </div>
 
     <!-- Load Scripts -->
-    <script src="js/config.js?v=20260302c"></script>
+    <script src="js/config.js?v=20260303f"></script>
     <script src="js/pali-dictionary.js?v=20250721n"></script>
     <script src="js/audio-processor.js?v=20250721l"></script>
     <script src="js/project-manager-server.js?v=20260302a"></script>
@@ -493,5 +524,116 @@
     <script src="js/user-manager.js?v=20260303a"></script>
     <script src="js/ui-controller-fixed.js?v=20260303f"></script>
     <script src="js/app.js?v=20250723b"></script>
+
+    <!-- Whitespace Debug Logging -->
+    <script>
+        console.log('🚀 Page load started - initializing debug system');
+        
+        function debugWhitespace() {
+            const body = document.body;
+            const html = document.documentElement;
+            const main = document.querySelector('main');
+            const viewReview = document.getElementById('view-review');
+            const bottomBar = document.getElementById('bottom-action-bar');
+            
+            console.log('═══ WHITESPACE DEBUG INFO ═══');
+            console.log('📊 BODY METRICS:');
+            console.log(`  - offsetHeight: ${body.offsetHeight}px`);
+            console.log(`  - scrollHeight: ${body.scrollHeight}px`);
+            console.log(`  - clientHeight: ${body.clientHeight}px`);
+            console.log(`  - Computed height: ${window.getComputedStyle(body).height}`);
+            console.log(`  - Computed min-height: ${window.getComputedStyle(body).minHeight}`);
+            console.log(`  - Computed display: ${window.getComputedStyle(body).display}`);
+            console.log(`  - Computed flex-direction: ${window.getComputedStyle(body).flexDirection}`);
+            console.log(`  - Classes: ${body.className}`);
+            
+            console.log('📊 HTML METRICS:');
+            console.log(`  - offsetHeight: ${html.offsetHeight}px`);
+            console.log(`  - scrollHeight: ${html.scrollHeight}px`);
+            console.log(`  - clientHeight: ${html.clientHeight}px`);
+            
+            if (main) {
+                console.log('📊 MAIN CONTAINER METRICS:');
+                console.log(`  - offsetHeight: ${main.offsetHeight}px`);
+                console.log(`  - scrollHeight: ${main.scrollHeight}px`);
+                console.log(`  - Computed height: ${window.getComputedStyle(main).height}`);
+                console.log(`  - Computed padding-bottom: ${window.getComputedStyle(main).paddingBottom}`);
+                console.log(`  - Computed margin-bottom: ${window.getComputedStyle(main).marginBottom}`);
+                console.log(`  - Computed flex: ${window.getComputedStyle(main).flex}`);
+            }
+            
+            if (viewReview) {
+                const isHidden = viewReview.classList.contains('hidden');
+                console.log(`📊 VIEW-REVIEW METRICS (${isHidden ? 'HIDDEN' : 'VISIBLE'}):');
+                console.log(`  - offsetHeight: ${viewReview.offsetHeight}px`);
+                console.log(`  - scrollHeight: ${viewReview.scrollHeight}px`);
+                console.log(`  - Computed position: ${window.getComputedStyle(viewReview).position}`);
+                console.log(`  - Computed height: ${window.getComputedStyle(viewReview).height}`);
+                console.log(`  - Computed width: ${window.getComputedStyle(viewReview).width}`);
+                console.log(`  - Computed display: ${window.getComputedStyle(viewReview).display}`);
+            }
+            
+            if (bottomBar) {
+                console.log('📊 BOTTOM ACTION BAR METRICS:');
+                console.log(`  - offsetHeight: ${bottomBar.offsetHeight}px`);
+                console.log(`  - Computed margin-bottom: ${window.getComputedStyle(bottomBar).marginBottom}`);
+                console.log(`  - Computed padding-bottom: ${window.getComputedStyle(bottomBar).paddingBottom}`);
+            }
+            
+            console.log('📊 WINDOW & SCROLL:');
+            console.log(`  - innerHeight: ${window.innerHeight}px`);
+            console.log(`  - scrollY: ${window.scrollY}px`);
+            console.log(`  - document.scrollingElement.scrollHeight: ${document.scrollingElement?.scrollHeight}px`);
+            
+            console.log('📊 SCROLLBAR INFO:');
+            const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            console.log(`  - Scrollbar width: ${scrollbarWidth}px (${scrollbarWidth > 0 ? 'VISIBLE' : 'HIDDEN'})`);
+            
+            // Check if there's whitespace below the last element
+            const lastMainChild = main?.lastElementChild;
+            if (lastMainChild) {
+                const rect = lastMainChild.getBoundingClientRect();
+                const bottomSpacing = document.scrollingElement.scrollHeight - (rect.top + rect.height);
+                console.log(`📊 LAST VISIBLE ELEMENT (${lastMainChild.id || lastMainChild.className})`);
+                console.log(`  - Bottom position: ${rect.bottom}px from viewport top`);
+                console.log(`  - Extra space below: ${bottomSpacing}px`);
+                if (bottomSpacing > 20) {
+                    console.log(`  ⚠️  WARNING: Excessive whitespace detected! (${bottomSpacing}px)`);
+                }
+            }
+            
+            console.log('═════════════════════════════════');
+        }
+
+        // Run debug on page load
+        window.addEventListener('load', () => {
+            console.log('✅ Page fully loaded');
+            setTimeout(debugWhitespace, 100);
+        });
+
+        // Monitor when review view is shown/hidden
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'class') {
+                    const viewReview = document.getElementById('view-review');
+                    if (viewReview) {
+                        const isHidden = viewReview.classList.contains('hidden');
+                        console.log(`🔄 [VIEW TOGGLED] Review view is now ${isHidden ? '❌ HIDDEN' : '✅ VISIBLE'}`);
+                        setTimeout(debugWhitespace, 100);
+                    }
+                }
+            });
+        });
+
+        const viewReview = document.getElementById('view-review');
+        if (viewReview) {
+            observer.observe(viewReview, { attributes: true, attributeFilter: ['class'] });
+            console.log('✅ Whitespace monitor initialized');
+        }
+
+        // Also expose function to window for manual triggering in console
+        window.debugWhitespace = debugWhitespace;
+        console.log('💡 Tip: Run debugWhitespace() in console anytime to check metrics');
+    </script>
 </body>
 </html>

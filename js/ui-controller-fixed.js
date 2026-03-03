@@ -560,7 +560,18 @@ class UIController {
                 break;
                 
             case 'review':
-                if (this.elements.viewReview) this.elements.viewReview.classList.remove('hidden');
+                if (this.elements.viewReview) {
+                    console.log('✅ Showing review view');
+                    this.elements.viewReview.classList.remove('hidden');
+                    
+                    // Log dimensions after showing
+                    setTimeout(() => {
+                        if (window.debugWhitespace) {
+                            console.log('🔍 Running debug check after showing review view');
+                            window.debugWhitespace();
+                        }
+                    }, 50);
+                }
                 break;
         }
         this.currentView = viewName;
@@ -1768,16 +1779,12 @@ class UIController {
             };
             
             this.elements.reviewProjectInfo.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <span class="font-medium text-gray-900">${UTILS.escapeHtml(project.name)}</span>
-                    <span class="text-gray-400">•</span>
-                    <span class="text-gray-600">${UTILS.escapeHtml(project.assignedTo) || 'Unassigned'}</span>
-                    <span class="text-gray-400">•</span>
-                    <span class="text-gray-600">${UTILS.escapeHtml(project.audioFileName || 'No audio')}</span>
-                    <span class="px-2 py-1 text-xs font-medium rounded-full ${statusColor[project.status] || 'bg-gray-100 text-gray-800'}">
-                        ${project.status}
-                    </span>
-                </div>
+                <span class="font-semibold text-gray-900 text-base">${UTILS.escapeHtml(project.name)}</span>
+                <span class="text-gray-300 mx-2">|</span>
+                <span class="text-sm text-gray-600">${UTILS.escapeHtml(project.audioFileName || 'No audio')}</span>
+                <span class="px-2.5 py-1 text-xs font-medium rounded-md ${statusColor[project.status] || 'bg-gray-100 text-gray-800'}">
+                    ${project.status}
+                </span>
             `;
             // If server provided a human-readable header (exportHeaderText), show it in the small header area
             const headerEl = document.getElementById('project-header');
@@ -3376,9 +3383,10 @@ class UIController {
 
                     if (details) {
                         manifestPre.textContent = JSON.stringify(details, null, 2);
-                        manifestPre.classList.remove('hidden');
-                        if (btn) btn.textContent = 'Hide Source Info ▴';
-                        // allow collapsing by clicking the button
+                        // Keep it hidden by default - only show when button is clicked
+                        manifestPre.classList.add('hidden');
+                        if (btn) btn.textContent = 'Show Source Info ▾';
+                        // allow toggling by clicking the button
                         if (btn) {
                             btn.onclick = () => {
                                 if (manifestPre.classList.contains('hidden')) {
