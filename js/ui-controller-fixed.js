@@ -14,6 +14,12 @@ class UIController {
             this.hasLoggedNoProject = false; // Flag to prevent console spam
             this.commandUpdateTimeout = null; // Timeout for debounced updates
             this.isSourceMode = false; // Rich text editor mode flag
+            this.transcriptSegments = [];
+            this.activeTranscriptSegmentId = null;
+            this.transcriptSyncEnabled = true;
+            this._boundTranscriptAudioTimeUpdate = null;
+            this.reviewAutosaveTimeout = null;
+            this.validReviewers = [];
             
             // Transcription modal timer properties
             this.transcriptionTimer = null;
@@ -94,17 +100,7 @@ class UIController {
             this.elements = {
             // Dashboard navigation buttons
             btnStartConversion: document.getElementById('btn-start-conversion'),
-            btnReadyReview: document.getElementById('btn-ready-review'),
-            btnApproved: document.getElementById('btn-approved'),
             linkManageDictionary: document.getElementById('link-manage-dictionary'),
-            
-            // Back to dashboard buttons
-            btnBackToDashboardReview: document.getElementById('btn-back-to-dashboard-review'),
-            btnBackToDashboardApproved: document.getElementById('btn-back-to-dashboard-approved'),
-            
-            // Clear all buttons for filtered views
-            btnClearAllReview: document.getElementById('btn-clear-all-review'),
-            btnClearAllApproved: document.getElementById('btn-clear-all-approved'),
             
             // Modal elements
             newProjectModal: document.getElementById('new-project-modal'),
@@ -129,10 +125,17 @@ class UIController {
             reviewAudioPlayer: document.getElementById('review-audio-player'),
             transcriptionEditor: document.getElementById('transcription-editor'),
             transcriptionPreview: document.getElementById('transcription-preview'),
+            transcriptSearch: document.getElementById('transcript-search'),
+            transcriptSyncToggle: document.getElementById('transcript-sync-toggle'),
+            transcriptSegmentsList: document.getElementById('transcript-segments-list'),
+            tabSegments: document.getElementById('tab-segments'),
+            tabFulltext: document.getElementById('tab-fulltext'),
+            tabContentSegments: document.getElementById('tab-content-segments'),
+            tabContentFulltext: document.getElementById('tab-content-fulltext'),
             wordCount: document.getElementById('word-count'),
             characterCount: document.getElementById('character-count'),
-            btnSaveDraft: document.getElementById('btn-save-draft'),
             btnResetText: document.getElementById('btn-reset-text'),
+            btnMarkReviewed: document.getElementById('btn-mark-reviewed'),
             btnApproveFinal: document.getElementById('btn-approve-final'),
             btnDownloadFinal: document.getElementById('btn-download-final'),
             btnExportPdf: document.getElementById('btn-export-pdf'),
@@ -143,20 +146,8 @@ class UIController {
             projectsTableBody: document.getElementById('projects-table-body'),
             emptyProjectsState: document.getElementById('empty-projects-state'),
             searchProjects: document.getElementById('search-projects'),
-            btnFilterAll: document.getElementById('btn-filter-all'),
-            btnFilterReview: document.getElementById('btn-filter-review'),
-            btnFilterApproved: document.getElementById('btn-filter-approved'),
+            statusFilter: document.getElementById('status-filter'),
             
-            // Ready for Review view
-            reviewProjectsTableBody: document.getElementById('review-projects-table-body'),
-            emptyReviewState: document.getElementById('empty-review-state'),
-            searchReviewProjects: document.getElementById('search-review-projects'),
-            
-            // Approved view
-            approvedProjectsTableBody: document.getElementById('approved-projects-table-body'),
-            emptyApprovedState: document.getElementById('empty-approved-state'),
-            searchApprovedProjects: document.getElementById('search-approved-projects'),
-
             // Processing status
             processingStatusBar: document.getElementById('processing-status-bar'),
             processingStatusMessage: document.getElementById('processing-status-message'),
@@ -178,17 +169,17 @@ class UIController {
             transcriptionElapsedTime: document.getElementById('transcription-elapsed-time'),
             transcriptionRemainingTime: document.getElementById('transcription-remaining-time'),
             transcriptionFileInfo: document.getElementById('transcription-file-info'),
+            transcriptionLiveLogs: document.getElementById('transcription-live-logs'),
             minimizeTranscriptionModal: document.getElementById('minimize-transcription-modal'),
             cancelTranscriptionProcessing: document.getElementById('cancel-transcription-processing'),
 
             // Views
             viewDashboard: document.getElementById('view-dashboard'),
-            viewReadyReview: document.getElementById('view-ready-review'),
-            viewApproved: document.getElementById('view-approved'),
             viewProjects: document.getElementById('view-projects'),
             viewCreate: document.getElementById('view-create'),
             viewLocal: document.getElementById('view-local'),
-            viewReview: document.getElementById('view-review')
+            viewReview: document.getElementById('view-review'),
+            viewUsers: document.getElementById('view-users')
         };
 
         // Debug: Check if critical elements are found
@@ -219,53 +210,11 @@ class UIController {
             });
         }
         
-        if (this.elements.btnReadyReview) {
-            this.elements.btnReadyReview.addEventListener('click', () => {
-                console.log('🔔 Ready for Review button clicked');
-                this.showView('ready-review');
-            });
-        }
-        
-        if (this.elements.btnApproved) {
-            this.elements.btnApproved.addEventListener('click', () => {
-                console.log('🔔 Approved button clicked');
-                this.showView('approved');
-            });
-        }
-        
         if (this.elements.linkManageDictionary) {
             this.elements.linkManageDictionary.addEventListener('click', (e) => {
                 e.preventDefault();
                 console.log('🔔 Manage Dictionary link clicked');
                 this.showDictionaryManagement();
-            });
-        }
-        
-        // Back to dashboard buttons
-        if (this.elements.btnBackToDashboardReview) {
-            this.elements.btnBackToDashboardReview.addEventListener('click', () => {
-                this.showView('dashboard');
-            });
-        }
-        
-        if (this.elements.btnBackToDashboardApproved) {
-            this.elements.btnBackToDashboardApproved.addEventListener('click', () => {
-                this.showView('dashboard');
-            });
-        }
-        
-        // Clear all buttons for filtered views
-        if (this.elements.btnClearAllReview) {
-            this.elements.btnClearAllReview.addEventListener('click', () => {
-                console.log('🗑️ Clear All Review Projects button clicked');
-                this.clearProjectsByStatus('NEEDS_REVIEW');
-            });
-        }
-        
-        if (this.elements.btnClearAllApproved) {
-            this.elements.btnClearAllApproved.addEventListener('click', () => {
-                console.log('🗑️ Clear All Approved Projects button clicked');
-                this.clearProjectsByStatus('APPROVED');
             });
         }
         
@@ -317,18 +266,53 @@ class UIController {
         if (this.elements.transcriptionEditor) {
             this.elements.transcriptionEditor.addEventListener('input', () => {
                 this.updateWordCount();
+                this.updateTranscriptionPreview();
+                this.syncSegmentsFromFullText();
+                this.scheduleReviewAutosave();
             });
         }
 
-        if (this.elements.btnSaveDraft) {
-            this.elements.btnSaveDraft.addEventListener('click', async () => {
-                await this.saveDraft();
+        if (this.elements.transcriptSearch) {
+            this.elements.transcriptSearch.addEventListener('input', (event) => {
+                this.renderTranscriptSegments(event.target.value || '');
+            });
+        }
+
+        if (this.elements.transcriptSyncToggle) {
+            this.elements.transcriptSyncToggle.addEventListener('change', (event) => {
+                this.transcriptSyncEnabled = !!event.target.checked;
+            });
+        }
+
+        if (this.elements.transcriptSegmentsList) {
+            this.elements.transcriptSegmentsList.addEventListener('click', (event) => {
+                this.handleTranscriptPanelClick(event);
+            });
+        }
+
+        // Tab switching
+        if (this.elements.tabSegments) {
+            this.elements.tabSegments.addEventListener('click', () => {
+                this.switchTab('segments');
+            });
+        }
+
+        if (this.elements.tabFulltext) {
+            this.elements.tabFulltext.addEventListener('click', () => {
+                this.switchTab('fulltext');
             });
         }
 
         if (this.elements.btnResetText) {
             this.elements.btnResetText.addEventListener('click', () => {
                 this.resetToOriginalText();
+            });
+        }
+
+        if (this.elements.btnMarkReviewed) {
+            this.elements.btnMarkReviewed.addEventListener('click', () => {
+                console.log('🔔 Mark as Reviewed button clicked');
+                this.markAsReviewed();
             });
         }
 
@@ -368,39 +352,10 @@ class UIController {
             });
         }
 
-        if (this.elements.btnFilterAll) {
-            this.elements.btnFilterAll.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showView('dashboard');
-                this.refreshProjectsList();
-            });
-        }
-
-        if (this.elements.btnFilterReview) {
-            this.elements.btnFilterReview.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showView('ready-review');
-                this.refreshReviewProjectsList();
-            });
-        }
-
-        if (this.elements.btnFilterApproved) {
-            this.elements.btnFilterApproved.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showView('approved');
-                this.refreshApprovedProjectsList();
-            });
-        }
-        
-        if (this.elements.searchReviewProjects) {
-            this.elements.searchReviewProjects.addEventListener('input', (e) => {
-                this.debouncedSearch(e.target.value, 'review');
-            });
-        }
-        
-        if (this.elements.searchApprovedProjects) {
-            this.elements.searchApprovedProjects.addEventListener('input', (e) => {
-                this.debouncedSearch(e.target.value, 'approved');
+        // Status filter dropdown
+        if (this.elements.statusFilter) {
+            this.elements.statusFilter.addEventListener('change', (e) => {
+                this.filterProjectsByStatus(e.target.value);
             });
         }
 
@@ -470,6 +425,7 @@ class UIController {
                 inputTimeout = setTimeout(() => {
                     this.updateWordCount();
                     this.updateTranscriptionPreview();
+                    this.scheduleReviewAutosave();
                 }, 300); // 300ms debounce
             });
             
@@ -580,16 +536,6 @@ class UIController {
                 if (this.elements.viewDashboard) this.elements.viewDashboard.classList.remove('hidden');
                 break;
                 
-            case 'ready-review':
-                if (this.elements.viewReadyReview) this.elements.viewReadyReview.classList.remove('hidden');
-                this.refreshReviewProjectsList();
-                break;
-                
-            case 'approved':
-                if (this.elements.viewApproved) this.elements.viewApproved.classList.remove('hidden');
-                this.refreshApprovedProjectsList();
-                break;
-                
             case 'projects':
                 if (this.elements.tabProjects) this.elements.tabProjects.classList.add('active');
                 if (this.elements.viewProjects) this.elements.viewProjects.classList.remove('hidden');
@@ -606,6 +552,11 @@ class UIController {
                 if (this.elements.tabLocal) this.elements.tabLocal.classList.add('active');
                 if (this.elements.viewLocal) this.elements.viewLocal.classList.remove('hidden');
                 this.initializeLocalView();
+                break;
+                
+            case 'users':
+                const viewUsers = document.getElementById('view-users');
+                if (viewUsers) viewUsers.classList.remove('hidden');
                 break;
                 
             case 'review':
@@ -645,10 +596,16 @@ class UIController {
     async handleCreateProject() {
         console.log('🚀 Create project form submitted');
         try {
+            const selectedReviewerId = this.elements.assignedTo?.value || '';
+            const selectedReviewerOption = selectedReviewerId
+                ? this.elements.assignedTo?.selectedOptions?.[0]
+                : null;
+
             // Get form data
             const formData = {
                 name: this.elements.projectName?.value?.trim() || '',
-                assignedTo: this.elements.assignedTo?.value?.trim() || ''
+                assignedTo: selectedReviewerOption?.dataset?.displayName || '',
+                assignedToUserId: selectedReviewerId
             };
             // Get audio file and preview mode
             const audioFile = this.elements.projectAudioFile?.files[0];
@@ -1031,34 +988,24 @@ class UIController {
         return htmlParagraphs.join('\n\n');
     }
 
-    // Highlight potential Pali terms in text
+    // Highlight Pali terms in text (only words with Pali diacritics)
     highlightPaliTerms(text) {
-        console.log('🔍 Highlighting Pali terms in text:', text.substring(0, 100));
+        console.log('🔍 Highlighting Pali terms in text:', text.substring(0, 200));
         
-        // Simple heuristic: look for words with diacritics or common Pali patterns
-        const paliPatterns = [
-            // Words with diacritics
-            /\b\w*[āīūṅñṭḍṇḷṃḥṣṛ]\w*\b/g,
-            // Common Pali words
-            /\b(dhamma|dharma|sangha|buddha|nirvana|nibbana|samsara|karma|kamma|sutra|sutta|bhikkhu|bodhisattva)\b/gi
-        ];
+        // ONLY highlight words that already contain Pali diacritics
+        // Do NOT convert English words to Pali - that's done server-side during transcription
+        const paliDiacriticPattern = /\b\w*[āīūṅñṭḍṇḷṃḥṣṛĀĪŪṄÑṬḌṆḶṂḤṢṚ]\w*\b/g;
         
-        let modifiedText = text;
-        paliPatterns.forEach((pattern, index) => {
-            const matches = modifiedText.match(pattern);
-            if (matches) {
-                console.log(`✨ Pattern ${index} found matches:`, matches);
-            }
-            modifiedText = modifiedText.replace(pattern, '<span class="pali-text">$&</span>');
-        });
-        
-        if (modifiedText !== text) {
+        const matches = text.match(paliDiacriticPattern);
+        if (matches) {
+            console.log(`✨ Found ${matches.length} Pali words with diacritics:`, matches.slice(0, 5));
+            const modifiedText = text.replace(paliDiacriticPattern, '<span class="pali-text">$&</span>');
             console.log('✅ Text modified with Pali highlighting');
+            return modifiedText;
         } else {
-            console.log('⚠️ No Pali terms found');
+            console.log('⚠️ No Pali diacritics found - returning original text');
+            return text;
         }
-        
-        return modifiedText;
     }
 
     // Cancel current processing
@@ -1160,6 +1107,9 @@ class UIController {
         if (this.elements.transcriptionRemainingTime) {
             this.elements.transcriptionRemainingTime.textContent = '--:--';
         }
+        if (this.elements.transcriptionLiveLogs) {
+            this.elements.transcriptionLiveLogs.textContent = 'Waiting for transcription logs...';
+        }
         
         // Show the modal
         if (this.elements.transcriptionProgressModal) {
@@ -1179,6 +1129,9 @@ class UIController {
         
         // Stop the timer
         this.stopTranscriptionTimer();
+        if (!this.isProcessing) {
+            // Polling stopped on transaction completion
+        }
     }
 
     minimizeTranscriptionModal() {
@@ -1455,19 +1408,34 @@ class UIController {
             if (this.useServerManager) {
                 await this.projectManager.loadProjects();
             }
-            const projects = this.projectManager.getAllProjects();
+            let projects = this.projectManager.getAllProjects();
+            
+            // Filter projects based on user role
+            if (window.authManager && window.authManager.currentUser) {
+                const user = window.authManager.currentUser;
+                if (user.role === 'reviewer') {
+                    // Reviewers only see projects assigned to them
+                    projects = projects.filter(p => p.assignedToUserId === user.id);
+                    console.log(`📋 Filtered to ${projects.length} projects assigned to reviewer ${user.email}`);
+                }
+                // Admins see all projects
+            }
             
             // Update table view (primary)
             if (this.elements.projectsTableBody) {
                 this.elements.projectsTableBody.innerHTML = '';
                 
                 if (projects.length === 0) {
+                    const message = window.authManager && window.authManager.currentUser?.role === 'reviewer'
+                        ? 'No projects assigned to you yet. Ask an admin to assign projects.'
+                        : 'No projects yet. Create your first project to get started!';
+                    
                     this.elements.projectsTableBody.innerHTML = `
                         <tr>
                             <td colspan="6" class="px-4 py-8 text-center text-gray-500">
                                 <div class="flex flex-col items-center">
                                     <div class="text-4xl mb-2">🎙️</div>
-                                    <p>No projects yet. Create your first project to get started!</p>
+                                    <p>${message}</p>
                                 </div>
                             </td>
                         </tr>
@@ -1486,6 +1454,40 @@ class UIController {
             console.error('❌ Error refreshing projects:', error);
             this.showErrorMessage('Failed to refresh projects');
         }
+    }
+
+    // Filter projects by status
+    filterProjectsByStatus(status) {
+        const rows = this.elements.projectsTableBody.querySelectorAll('tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            // Skip the empty state row
+            if (row.querySelector('[colspan]')) {
+                return;
+            }
+            
+            if (status === 'all') {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                const statusBadge = row.querySelector('.table-status-badge');
+                if (statusBadge) {
+                    // Normalize both values for comparison
+                    const projectStatus = statusBadge.textContent.trim().toLowerCase().replace(/\s+/g, '_');
+                    const filterStatus = status.toLowerCase();
+                    
+                    if (projectStatus === filterStatus) {
+                        row.style.display = '';
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            }
+        });
+        
+        console.log(`Filtered projects: ${visibleCount} visible out of ${rows.length} total`);
     }
 
     // Ensure dynamic buttons (toolbar, action buttons) have titles and aria-labels so tooltips show
@@ -1579,17 +1581,41 @@ class UIController {
         row.onclick = () => this.openProject(project.id);
         
         const statusColors = {
-            [CONFIG.PROJECT_STATUS.NEW]: 'bg-blue-100 text-blue-800',
-            [CONFIG.PROJECT_STATUS.PROCESSING]: 'bg-yellow-100 text-yellow-800', 
-            [CONFIG.PROJECT_STATUS.COMPLETED]: 'bg-green-100 text-green-800',
-            [CONFIG.PROJECT_STATUS.NEEDS_REVIEW]: 'bg-orange-100 text-orange-800',
-            [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-purple-100 text-purple-800',
-            [CONFIG.PROJECT_STATUS.ERROR]: 'bg-red-100 text-red-800'
+            [CONFIG.PROJECT_STATUS.IN_REVIEW]: 'bg-blue-100 text-blue-800',
+            [CONFIG.PROJECT_STATUS.REVIEWED]: 'bg-yellow-100 text-yellow-800',
+            [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-green-100 text-green-800'
         };
 
         const formattedDate = new Date(project.created).toLocaleDateString();
-        const audioFileName = project.audioFileName || 'Unknown';
-        const assignedTo = project.assignedTo || '-';
+        const assignedTo = project.assignedTo || project.assignedToName || 'Unassigned';
+        
+        // Debug logging for approved projects
+        if (project.status === CONFIG.PROJECT_STATUS.APPROVED) {
+            console.log('🔍 Approved project:', {
+                name: project.name,
+                status: project.status,
+                approvedByName: project.approvedByName,
+                approvedByUserId: project.approvedByUserId,
+                approvedDate: project.approvedDate,
+                reviewedByName: project.reviewedByName,
+                allKeys: Object.keys(project)
+            });
+        }
+        
+        // Smart display of workflow status based on project status
+        let workflowInfo = '';
+        if (project.status === CONFIG.PROJECT_STATUS.REVIEWED && project.reviewedByName) {
+            const reviewedDate = project.reviewedDate ? new Date(project.reviewedDate).toLocaleDateString() : '';
+            workflowInfo = `<div class="text-xs text-blue-600 mt-1">✓ Reviewed by ${UTILS.escapeHtml(project.reviewedByName)}${reviewedDate ? ' on ' + reviewedDate : ''}</div>`;
+        } else if (project.status === CONFIG.PROJECT_STATUS.APPROVED && project.approvedByName) {
+            const approvedDate = project.approvedDate ? new Date(project.approvedDate).toLocaleDateString() : '';
+            workflowInfo = `<div class="text-xs text-green-600 mt-1">✓ Approved by ${UTILS.escapeHtml(project.approvedByName)}${approvedDate ? ' on ' + approvedDate : ''}</div>`;
+            // Also show reviewed info if available
+            if (project.reviewedByName) {
+                const reviewedDate = project.reviewedDate ? new Date(project.reviewedDate).toLocaleDateString() : '';
+                workflowInfo = `<div class="text-xs text-blue-600 mt-1">✓ Reviewed by ${UTILS.escapeHtml(project.reviewedByName)}${reviewedDate ? ' on ' + reviewedDate : ''}</div>` + workflowInfo;
+            }
+        }
         
         // Check if this project is currently being processed
         const isCurrentlyProcessing = this.currentProcessId && this.currentProcessId.includes(project.id);
@@ -1597,13 +1623,14 @@ class UIController {
         row.innerHTML = `
             <td class="px-3 py-2 text-sm font-medium text-gray-900 project-name-cell" data-full-name="${UTILS.escapeHtml(project.name)}">
                 <div class="dashboard-compact-title">${UTILS.escapeHtml(project.name)}</div>
-                <div class="dashboard-compact-subtext">${UTILS.escapeHtml(project.audioFileName || assignedTo || '')}</div>
+                <div class="text-xs text-gray-400 mt-1">${formattedDate}</div>
+                ${workflowInfo}
             </td>
             <td class="px-3 py-2 text-sm text-gray-500">
-                <div class="flex items-center gap-2">
-                    <span class="table-status-badge ${statusColors[project.status] || 'bg-gray-100 text-gray-800'}">${project.status}</span>
-                    <span class="text-xs text-gray-400">• ${formattedDate}</span>
-                </div>
+                <span class="table-status-badge ${statusColors[project.status] || 'bg-gray-100 text-gray-800'}">${project.status}</span>
+            </td>
+            <td class="px-3 py-2 text-sm text-gray-600">
+                ${UTILS.escapeHtml(assignedTo)}
             </td>
             <td class="px-3 py-2 text-sm">
                 <div class="project-row-actions" onclick="event.stopPropagation();">
@@ -1699,6 +1726,16 @@ class UIController {
                 filenameEl.textContent = originalName || 'No audio';
                 if (sourcePath) filenameEl.textContent += ` • ${sourcePath}`;
             }
+            
+            // Display processing model if available
+            const modelDisplay = document.getElementById('processing-model-display');
+            const modelName = document.getElementById('model-name');
+            if (modelDisplay && modelName && project.processingModel) {
+                modelName.textContent = project.processingModel;
+                modelDisplay.classList.remove('hidden');
+            } else if (modelDisplay) {
+                modelDisplay.classList.add('hidden');
+            }
 
             // Rename Export button label to 'Save as PDF' if present
             if (this.elements.btnExportPdf) {
@@ -1739,6 +1776,7 @@ class UIController {
                 
                 // Set up keyboard shortcuts for audio control
                 this.setupAudioKeyboardShortcuts();
+                this.attachTranscriptAudioSync();
             } else {
                 console.log('🎵 No audio file available');
                 this.elements.reviewAudioPlayer.innerHTML = `
@@ -1775,6 +1813,12 @@ class UIController {
         });
         this.currentProject = project;
 
+        // Initialize Stream-like transcript rail
+        this.initializeTranscriptRail(project);
+
+        // Setup tab switching
+        this.setupTabSwitching();
+
         // Store original text for reset functionality
         this.originalTranscription = project.formattedText || project.transcription || '';
         
@@ -1804,12 +1848,8 @@ class UIController {
                     this.projectManager.deleteProject(project.id);
                 });
                 
-                // Refresh the appropriate view
-                if (status === 'NEEDS_REVIEW') {
-                    this.refreshReviewProjectsList();
-                } else if (status === 'APPROVED') {
-                    this.refreshApprovedProjectsList();
-                }
+                // Refresh the projects list
+                this.refreshProjectsList();
                 
                 this.showSuccessMessage(`All ${filteredProjects.length} ${statusName} projects have been deleted`);
                 console.log(`✅ All ${statusName} projects cleared successfully`);
@@ -2361,17 +2401,6 @@ class UIController {
     setRichTextContent(content, hasHTML = false) {
         const editor = this.elements.transcriptionEditor;
         if (!editor) return;
-
-        // Strip inline SOURCE-INFO markers if present so editor shows only the transcription content
-        const SOURCE_START = '--- SOURCE-INFO START ---';
-        const SOURCE_END = '--- SOURCE-INFO END ---';
-        if (content && typeof content === 'string' && content.includes(SOURCE_START) && content.includes(SOURCE_END)) {
-            const start = content.indexOf(SOURCE_START);
-            const end = content.indexOf(SOURCE_END) + SOURCE_END.length;
-            const before = content.substring(0, start);
-            const after = content.substring(end);
-            content = before + after;
-        }
         
         if (hasHTML) {
             editor.innerHTML = content;
@@ -2382,11 +2411,11 @@ class UIController {
                 const paragraphs = content.split('\n\n')
                     .map(p => p.trim())
                     .filter(p => p.length > 0)
-                    .map(p => `<p>${p.replace(/\n/g, ' ')}</p>`);
+                    .map(p => `<p>${this.highlightPaliTerms(p.replace(/\n/g, ' '))}</p>`);
                 editor.innerHTML = paragraphs.join('');
             } else {
                 // Handle single newlines as line breaks
-                const htmlContent = content.replace(/\n/g, '<br>');
+                const htmlContent = this.highlightPaliTerms(String(content || '').replace(/\n/g, '<br>'));
                 editor.innerHTML = htmlContent;
             }
         }
@@ -2449,6 +2478,507 @@ class UIController {
         });
     }
 
+    normalizeTranscriptSegments(project) {
+        if (!project) return [];
+
+        let raw = project.transcriptSegments ?? project.transcript_segments ?? [];
+        if (typeof raw === 'string') {
+            try {
+                raw = JSON.parse(raw);
+            } catch (error) {
+                raw = [];
+            }
+        }
+
+        if (!Array.isArray(raw)) return [];
+
+        return raw
+            .map((segment, index) => ({
+                id: segment?.id || `seg-${index + 1}`,
+                start: Number.isFinite(Number(segment?.start)) ? Number(segment.start) : null,
+                end: Number.isFinite(Number(segment?.end)) ? Number(segment.end) : null,
+                text: String(segment?.text || '').trim(),
+                speaker: segment?.speaker || '',
+                confidence: this.getSegmentConfidence(segment),
+                avgLogprob: Number.isFinite(Number(segment?.avg_logprob)) ? Number(segment.avg_logprob) : null,
+                noSpeechProb: Number.isFinite(Number(segment?.no_speech_prob)) ? Number(segment.no_speech_prob) : null
+            }))
+            .filter(segment => segment.text.length > 0);
+    }
+
+    getSegmentConfidence(segment) {
+        if (!segment || typeof segment !== 'object') return null;
+
+        const direct = Number(segment.confidence);
+        if (Number.isFinite(direct)) {
+            if (direct > 1) return Math.max(0, Math.min(1, direct / 100));
+            return Math.max(0, Math.min(1, direct));
+        }
+
+        const avgLogProb = Number(segment.avg_logprob);
+        if (Number.isFinite(avgLogProb)) {
+            const estimated = Math.exp(avgLogProb);
+            if (Number.isFinite(estimated)) {
+                return Math.max(0, Math.min(1, estimated));
+            }
+        }
+
+        const noSpeechProb = Number(segment.no_speech_prob);
+        if (Number.isFinite(noSpeechProb)) {
+            return Math.max(0, Math.min(1, 1 - noSpeechProb));
+        }
+
+        return null;
+    }
+
+    buildFallbackSegmentsFromText(text) {
+        const content = String(text || '').trim();
+        if (!content) return [];
+
+        const lines = content
+            .split(/\n{1,2}/)
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+        return lines.map((line, index) => ({
+            id: `fallback-${index + 1}`,
+            start: null,
+            end: null,
+            text: line,
+            speaker: ''
+        }));
+    }
+
+    initializeTranscriptRail(project) {
+        let segments = this.normalizeTranscriptSegments(project);
+
+        if (!segments.length) {
+            const text = project?.editedText || project?.formattedText || project?.transcription || '';
+            segments = this.buildFallbackSegmentsFromText(text);
+        }
+
+        this.transcriptSegments = segments;
+        this.activeTranscriptSegmentId = null;
+
+        if (this.elements.transcriptSearch) {
+            this.elements.transcriptSearch.value = '';
+            // Remove old listener if exists
+            if (this.elements.transcriptSearch._transcriptSearchListener) {
+                this.elements.transcriptSearch.removeEventListener('input', this.elements.transcriptSearch._transcriptSearchListener);
+            }
+            // Add new listener
+            const searchListener = (e) => this.renderTranscriptSegments(e.target.value || '');
+            this.elements.transcriptSearch._transcriptSearchListener = searchListener;
+            this.elements.transcriptSearch.addEventListener('input', searchListener);
+        }
+
+        if (this.elements.transcriptSyncToggle) {
+            this.transcriptSyncEnabled = this.elements.transcriptSyncToggle.checked;
+            // Remove old listener if exists
+            if (this.elements.transcriptSyncToggle._transcriptSyncListener) {
+                this.elements.transcriptSyncToggle.removeEventListener('change', this.elements.transcriptSyncToggle._transcriptSyncListener);
+            }
+            // Add new listener
+            const syncListener = (e) => {
+                this.transcriptSyncEnabled = e.target.checked;
+            };
+            this.elements.transcriptSyncToggle._transcriptSyncListener = syncListener;
+            this.elements.transcriptSyncToggle.addEventListener('change', syncListener);
+        }
+
+        // Add view toggle listeners
+        if (this.elements.viewToggleSegments) {
+            // Remove old listener if exists
+            if (this.elements.viewToggleSegments._viewToggleListener) {
+                this.elements.viewToggleSegments.removeEventListener('click', this.elements.viewToggleSegments._viewToggleListener);
+            }
+            // Add new listener
+            const toggleSegmentsListener = () => this.switchView('segments');
+            this.elements.viewToggleSegments._viewToggleListener = toggleSegmentsListener;
+            this.elements.viewToggleSegments.addEventListener('click', toggleSegmentsListener);
+        }
+
+        if (this.elements.viewToggleFulltext) {
+            // Remove old listener if exists
+            if (this.elements.viewToggleFulltext._viewToggleListener) {
+                this.elements.viewToggleFulltext.removeEventListener('click', this.elements.viewToggleFulltext._viewToggleListener);
+            }
+            // Add new listener
+            const toggleFulltextListener = () => this.switchView('fulltext');
+            this.elements.viewToggleFulltext._viewToggleListener = toggleFulltextListener;
+            this.elements.viewToggleFulltext.addEventListener('click', toggleFulltextListener);
+        }
+
+        // Add segment list click handler
+        if (this.elements.transcriptSegmentsList) {
+            // Remove old listener if exists
+            if (this.elements.transcriptSegmentsList._panelClickListener) {
+                this.elements.transcriptSegmentsList.removeEventListener('click', this.elements.transcriptSegmentsList._panelClickListener);
+            }
+            // Add new listener
+            const panelClickListener = (e) => this.handleTranscriptPanelClick(e);
+            this.elements.transcriptSegmentsList._panelClickListener = panelClickListener;
+            this.elements.transcriptSegmentsList.addEventListener('click', panelClickListener);
+        }
+
+        this.renderTranscriptSegments('');
+        this.attachTranscriptAudioSync();
+    }
+
+    switchView(viewType) {
+        if (viewType === 'segments') {
+            // Show transcript segments, hide full text
+            if (this.elements.transcriptRailView) this.elements.transcriptRailView.classList.remove('hidden');
+            if (this.elements.fullTextView) this.elements.fullTextView.classList.add('hidden');
+            
+            // Update button styles
+            if (this.elements.viewToggleSegments) {
+                this.elements.viewToggleSegments.classList.add('active-view-toggle');
+                this.elements.viewToggleSegments.style.backgroundColor = '#2563eb';
+                this.elements.viewToggleSegments.style.color = '#ffffff';
+            }
+            if (this.elements.viewToggleFulltext) {
+                this.elements.viewToggleFulltext.classList.remove('active-view-toggle');
+                this.elements.viewToggleFulltext.style.backgroundColor = '#e5e7eb';
+                this.elements.viewToggleFulltext.style.color = '#374151';
+            }
+        } else if (viewType === 'fulltext') {
+            // Show full text, hide transcript segments
+            if (this.elements.transcriptRailView) this.elements.transcriptRailView.classList.add('hidden');
+            if (this.elements.fullTextView) this.elements.fullTextView.classList.remove('hidden');
+            
+            // Update button styles
+            if (this.elements.viewToggleSegments) {
+                this.elements.viewToggleSegments.classList.remove('active-view-toggle');
+                this.elements.viewToggleSegments.style.backgroundColor = '#e5e7eb';
+                this.elements.viewToggleSegments.style.color = '#374151';
+            }
+            if (this.elements.viewToggleFulltext) {
+                this.elements.viewToggleFulltext.classList.add('active-view-toggle');
+                this.elements.viewToggleFulltext.style.backgroundColor = '#2563eb';
+                this.elements.viewToggleFulltext.style.color = '#ffffff';
+            }
+        }
+    }
+
+    formatSegmentTime(seconds) {
+        if (!Number.isFinite(seconds) || seconds < 0) {
+            return '--:--';
+        }
+        const whole = Math.floor(seconds);
+        const mins = Math.floor(whole / 60);
+        const secs = whole % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    renderTranscriptSegments(filterTerm = '') {
+        const list = this.elements.transcriptSegmentsList;
+        if (!list) return;
+
+        const term = String(filterTerm || '').toLowerCase().trim();
+        const visible = this.transcriptSegments.filter(segment => {
+            if (!term) return true;
+            return segment.text.toLowerCase().includes(term);
+        });
+
+        if (!visible.length) {
+            list.innerHTML = `
+                <div class="text-sm text-gray-500 p-4 text-center border border-dashed border-gray-200 rounded-lg mt-2">
+                    No transcript segments found.
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = visible.map(segment => {
+            const timestamp = this.formatSegmentTime(segment.start);
+            const text = UTILS.escapeHtml(segment.text || '').substring(0, 120);
+            const isActive = this.activeTranscriptSegmentId === segment.id;
+            const bgColor = isActive ? '#dbeafe' : '#ffffff';
+            const borderColor = isActive ? '#7aa2d6' : '#d9e2ee';
+            const confidence = Number.isFinite(segment.confidence) ? Math.round(segment.confidence * 100) : null;
+            const confidenceMarkup = confidence !== null
+                ? `<span style="margin-left: 8px; font-size: 11px; color: #475569; background: #f1f5f9; border: 1px solid #dbe2ea; border-radius: 999px; padding: 2px 7px;">Conf ${confidence}%</span>`
+                : '<span style="margin-left: 8px; font-size: 11px; color: #94a3b8; background: #f8fafc; border: 1px dashed #dbe2ea; border-radius: 999px; padding: 2px 7px;">Conf n/a</span>';
+            return `
+                <div class="transcript-segment-row" data-segment-id="${segment.id}" data-start-time="${segment.start}" style="background: ${bgColor}; padding: 12px 10px; border-radius: 8px; cursor: pointer; border: 1px solid ${borderColor}; border-left: 3px solid #8eb4df; transition: all 0.2s; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; align-items: center;">
+                            <div class="timestamp-click" data-time="${segment.start}" style="font-size: 12px; font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; color: #2563eb; letter-spacing: 0.4px; cursor: pointer; text-decoration: underline; text-decoration-style: dotted;" title="Click to play from ${timestamp}">${timestamp}</div>
+                            ${confidenceMarkup}
+                        </div>
+                        <div data-role="segment-text" style="font-size: 13px; color: #1f2937; margin-top: 6px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${text}</div>
+                    </div>
+                    <button class="transcript-segment-edit" data-action="edit-segment" data-segment-id="${segment.id}" style="background: #f8fafc; color: #64748b; padding: 4px 6px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: all 0.2s; white-space: nowrap;">✏️</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    handleSegmentClick(segmentId) {
+        const segment = this.transcriptSegments.find(s => s.id === segmentId);
+        if (!segment) return;
+
+        // Set active segment
+        this.setActiveTranscriptSegment(segmentId, true);
+
+        // Seek audio to segment start time
+        const audio = this.getReviewAudioElement();
+        if (audio && segment.start !== undefined) {
+            audio.currentTime = segment.start;
+            audio.play().catch(err => console.log('Audio play failed:', err));
+        }
+    }
+
+    getReviewAudioElement() {
+        return document.getElementById('review-audio');
+    }
+
+    setActiveTranscriptSegment(segmentId, scrollIntoView = false) {
+        this.activeTranscriptSegmentId = segmentId;
+        const list = this.elements.transcriptSegmentsList;
+        if (!list) return;
+
+        list.querySelectorAll('.transcript-segment-row').forEach(row => {
+            row.classList.toggle('active', row.dataset.segmentId === segmentId);
+        });
+
+        if (scrollIntoView) {
+            const activeRow = list.querySelector(`.transcript-segment-row[data-segment-id="${segmentId}"]`);
+            if (activeRow) {
+                activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+    }
+
+    attachTranscriptAudioSync() {
+        const audio = this.getReviewAudioElement();
+        if (!audio) return;
+
+        if (this._boundTranscriptAudioTimeUpdate) {
+            audio.removeEventListener('timeupdate', this._boundTranscriptAudioTimeUpdate);
+        }
+
+        this._boundTranscriptAudioTimeUpdate = () => {
+            if (!this.transcriptSyncEnabled || !this.transcriptSegments.length) return;
+            const now = audio.currentTime;
+            const active = this.transcriptSegments.find(segment => {
+                if (!Number.isFinite(segment.start) || !Number.isFinite(segment.end)) {
+                    return false;
+                }
+                return now >= segment.start && now <= segment.end;
+            });
+            if (active && active.id !== this.activeTranscriptSegmentId) {
+                this.setActiveTranscriptSegment(active.id, true);
+            }
+        };
+
+        audio.addEventListener('timeupdate', this._boundTranscriptAudioTimeUpdate);
+    }
+
+    handleTranscriptPanelClick(event) {
+        // Handle timestamp clicks
+        const timestampClick = event.target.closest('.timestamp-click');
+        if (timestampClick) {
+            event.preventDefault();
+            event.stopPropagation();
+            const time = parseFloat(timestampClick.dataset.time);
+            if (Number.isFinite(time)) {
+                const audio = this.getReviewAudioElement();
+                if (audio) {
+                    audio.currentTime = Math.max(0, time);
+                    audio.play().catch(err => console.log('Audio play failed:', err));
+                }
+            }
+            return;
+        }
+        
+        if (event.target.closest('[data-action="save-segment"]') || event.target.closest('[data-action="cancel-segment"]')) {
+            return;
+        }
+
+        if (event.target.closest('[data-role="segment-editor"]')) {
+            return;
+        }
+
+        const editButton = event.target.closest('[data-action="edit-segment"]');
+        if (editButton) {
+            event.preventDefault();
+            const segmentId = editButton.dataset.segmentId;
+            this.startInlineSegmentEdit(segmentId);
+            return;
+        }
+
+        const row = event.target.closest('.transcript-segment-row');
+        if (!row) return;
+
+        const segmentId = row.dataset.segmentId;
+        const segment = this.transcriptSegments.find(item => item.id === segmentId);
+        if (!segment) return;
+
+        this.setActiveTranscriptSegment(segmentId, false);
+
+        const audio = this.getReviewAudioElement();
+        if (audio && segment.start !== undefined && Number.isFinite(segment.start)) {
+            audio.currentTime = Math.max(0, segment.start);
+            if (this.transcriptSyncEnabled) {
+                audio.play().catch(() => {});
+            }
+        }
+    }
+
+    startInlineSegmentEdit(segmentId) {
+        const list = this.elements.transcriptSegmentsList;
+        if (!list) return;
+
+        const row = list.querySelector(`.transcript-segment-row[data-segment-id="${segmentId}"]`);
+        if (!row) return;
+
+        const segment = this.transcriptSegments.find(item => item.id === segmentId);
+        if (!segment) return;
+
+        const textContainer = row.querySelector('[data-role="segment-text"]');
+        if (!textContainer) return;
+
+        if (textContainer.querySelector('[data-role="segment-editor"]')) return;
+
+        row.style.cursor = 'default';
+        textContainer.style.display = 'block';
+        textContainer.style.overflow = 'visible';
+        textContainer.style.webkitLineClamp = 'unset';
+        textContainer.style.webkitBoxOrient = 'unset';
+
+        textContainer.innerHTML = `
+            <div data-role="segment-editor" contenteditable="true" style="font-size: 13px; color: #1f2937; margin-top: 6px; line-height: 1.5; min-height: 54px; padding: 8px 10px; border: 1px solid #93c5fd; border-radius: 6px; background: #ffffff; outline: none; white-space: pre-wrap; word-break: break-word;"></div>
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                <button type="button" style="background: #15803d; color: #ffffff; padding: 6px 10px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;" data-action="save-segment" data-segment-id="${segmentId}">Save</button>
+                <button type="button" style="background: #e2e8f0; color: #475569; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;" data-action="cancel-segment" data-segment-id="${segmentId}">Cancel</button>
+            </div>
+        `;
+
+        const editor = textContainer.querySelector('[data-role="segment-editor"]');
+        if (editor) {
+            editor.textContent = segment.text || '';
+            editor.focus();
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        const saveButton = textContainer.querySelector('[data-action="save-segment"]');
+        const cancelButton = textContainer.querySelector('[data-action="cancel-segment"]');
+
+        if (saveButton) {
+            saveButton.addEventListener('click', async () => {
+                await this.saveInlineSegmentEdit(segmentId, editor?.textContent || '');
+            }, { once: true });
+        }
+
+        if (cancelButton) {
+            cancelButton.addEventListener('click', () => {
+                this.renderTranscriptSegments(this.elements.transcriptSearch?.value || '');
+            }, { once: true });
+        }
+
+        if (editor) {
+            editor.addEventListener('keydown', async (event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    await this.saveInlineSegmentEdit(segmentId, editor.textContent || '');
+                    return;
+                }
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this.renderTranscriptSegments(this.elements.transcriptSearch?.value || '');
+                }
+            });
+        }
+    }
+
+    async saveInlineSegmentEdit(segmentId, nextText) {
+        const cleaned = String(nextText || '').trim();
+        if (!cleaned) {
+            this.showErrorMessage('Segment text cannot be empty');
+            return;
+        }
+
+        this.transcriptSegments = this.transcriptSegments.map(segment => {
+            if (segment.id !== segmentId) return segment;
+            return { ...segment, text: cleaned };
+        });
+
+        await this.persistTranscriptSegments();
+        this.renderTranscriptSegments(this.elements.transcriptSearch?.value || '');
+        this.setActiveTranscriptSegment(segmentId, false);
+    }
+
+    // Legacy modal-based segment editor (kept for compatibility)
+    openSegmentEditor(segmentId) {
+        this.startInlineSegmentEdit(segmentId);
+    }
+
+    async persistTranscriptSegments() {
+        if (!this.currentProject?.id) return;
+
+        try {
+            const fullText = this.transcriptSegments.map(s => s.text || '').join('\n\n');
+            const richContent = this.getRichTextContent(false);
+            await this.projectManager.updateProject(this.currentProject.id, {
+                transcriptSegments: this.transcriptSegments,
+                transcription: fullText,
+                editedText: fullText,
+                richContent: richContent
+            });
+            this.currentProject.transcriptSegments = this.transcriptSegments;
+            this.currentProject.transcript_segments = this.transcriptSegments;
+            this.currentProject.transcription = fullText;
+            this.currentProject.editedText = fullText;
+            this.currentProject.richContent = richContent;
+            // Update full text editor to reflect changes
+            this.updateFullTextFromSegments();
+        } catch (error) {
+            console.error('❌ Failed to persist transcript segments:', error);
+            this.showErrorMessage('Could not save transcript segment changes');
+        }
+    }
+
+    updateFullTextFromSegments() {
+        // Rebuild full text from segments and update editor
+        const fullText = this.transcriptSegments
+            .map(seg => UTILS.escapeHtml(seg.text || ''))
+            .join('\n\n');
+        
+        if (this.elements.transcriptionEditor) {
+            this.setRichTextContent(fullText, false);
+        }
+    }
+
+    syncSegmentsFromFullText() {
+        // Split full text into segments when edited in full text view
+        if (!this.elements.transcriptionEditor) return;
+        
+        const fullText = this.elements.transcriptionEditor.innerText || '';
+        
+        // Only update if we're in fulltext tab and have segments
+        if (this.transcriptSegments.length === 0) return;
+        
+        // Split by paragraphs (double newlines)
+        const paragraphs = fullText.split(/\n{2,}/).filter(p => p.trim());
+        
+        // Update segment text while preserving timing info
+        paragraphs.forEach((para, idx) => {
+            if (this.transcriptSegments[idx]) {
+                this.transcriptSegments[idx].text = para.trim();
+            }
+        });
+        
+        // Render updated segments if on segments tab
+        this.renderTranscriptSegments(this.elements.transcriptSearch?.value || '');
+    }
+
     // Get processing time estimate
     getProcessingTimeEstimate(fileSizeMB, previewMode = false) {
         if (previewMode) {
@@ -2478,6 +3008,7 @@ class UIController {
         console.log('🔔 showNewProjectModal called');
         console.log('🔔 Modal element found:', !!this.elements.newProjectModal);
         if (this.elements.newProjectModal) {
+            this.populateReviewerDropdown();
             console.log('🔔 Modal classes before:', this.elements.newProjectModal.className);
             this.elements.newProjectModal.classList.remove('hidden');
             console.log('🔔 Modal classes after:', this.elements.newProjectModal.className);
@@ -2496,6 +3027,60 @@ class UIController {
         } else {
             console.error('❌ New project modal element not found!');
         }
+    }
+
+    async populateReviewerDropdown() {
+        const select = this.elements.assignedTo;
+        if (!select) {
+            return;
+        }
+
+        select.innerHTML = '<option value="">Loading reviewers...</option>';
+        select.disabled = true;
+
+        try {
+            const reviewers = await this.fetchValidReviewers();
+            this.validReviewers = reviewers;
+
+            select.innerHTML = '<option value="">Unassigned</option>';
+
+            reviewers.forEach((reviewer) => {
+                const option = document.createElement('option');
+                option.value = reviewer.id;
+                option.dataset.displayName = reviewer.name || reviewer.email;
+                option.textContent = reviewer.name
+                    ? `${reviewer.name} (${reviewer.email})`
+                    : reviewer.email;
+                select.appendChild(option);
+            });
+
+            select.disabled = false;
+        } catch (error) {
+            console.error('❌ Failed to load reviewers:', error);
+            select.innerHTML = '<option value="">Unassigned</option>';
+            select.disabled = false;
+            this.showNotification('Could not load reviewers. Project can still be created as unassigned.', 'warning', 5000);
+        }
+    }
+
+    async fetchValidReviewers() {
+        if (!window.authManager || !window.authManager.authToken) {
+            return [];
+        }
+
+        const response = await fetch('/users', {
+            headers: {
+                ...window.authManager.getAuthHeader()
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch users');
+        }
+
+        const data = await response.json();
+        const users = Array.isArray(data.users) ? data.users : [];
+        return users.filter((user) => user.role === 'reviewer');
     }
 
     // Hide new project modal
@@ -2525,22 +3110,6 @@ class UIController {
         console.log('📝 Showing transcription modal for processing...');
         this.showBackgroundProcessing(`Processing ${projectName}...`);
         this.processProjectAudioBackground(projectId, audioFile, previewMode, projectName);
-    }
-
-    // Refresh review projects list
-    refreshReviewProjectsList() {
-        console.log('🔄 Refreshing review projects list');
-        const reviewProjects = this.projectManager.getAllProjects()
-            .filter(p => p.status === CONFIG.PROJECT_STATUS.NEEDS_REVIEW);
-        this.populateProjectsTable(reviewProjects, 'review');
-    }
-
-    // Refresh approved projects list
-    refreshApprovedProjectsList() {
-        console.log('🔄 Refreshing approved projects list');
-        const approvedProjects = this.projectManager.getAllProjects()
-            .filter(p => p.status === CONFIG.PROJECT_STATUS.APPROVED);
-        this.populateProjectsTable(approvedProjects, 'approved');
     }
 
     // Initialize local view (placeholder)
@@ -2675,6 +3244,51 @@ class UIController {
         this.cancelCurrentProcessing();
     }
 
+    async markAsReviewed() {
+        console.log('📋 markAsReviewed() called');
+        
+        if (!this.currentProject) {
+            this.showErrorMessage('No project selected');
+            return;
+        }
+        
+        const currentUser = window.authManager?.currentUser;
+        if (!currentUser) {
+            this.showErrorMessage('User not authenticated');
+            return;
+        }
+        
+        try {
+            // Save current edits first
+            const finalText = this.getRichTextContent(true).trim();
+            const richContent = this.getRichTextContent(false);
+            
+            if (!finalText) {
+                this.showErrorMessage('Please complete the transcription before marking as reviewed');
+                return;
+            }
+            
+            // Update project status to Reviewed - user who performs action is recorded
+            await this.projectManager.updateProject(this.currentProject.id, {
+                status: CONFIG.PROJECT_STATUS.REVIEWED,
+                edited_text: finalText,
+                rich_content: richContent,
+                reviewed_by_user_id: currentUser.id,  // Whoever clicks the button
+                reviewed_date: new Date().toISOString()
+            });
+            
+            this.showSuccessMessage(`Project marked as reviewed by ${currentUser.name}`);
+            
+            // Refresh project list and return to dashboard
+            await this.refreshProjectsList();
+            this.showView('dashboard');
+            
+        } catch (error) {
+            console.error('❌ Error marking project as reviewed:', error);
+            this.showErrorMessage('Failed to mark project as reviewed: ' + error.message);
+        }
+    }
+
     async approveFinal() {
         console.log('🎯 approveFinal() called');
         console.log('🔍 Current project status:', {
@@ -2745,15 +3359,23 @@ class UIController {
         
         // Re-apply Pali highlighting to the final text
         const formattedFinalText = this.highlightPaliTerms(finalText);
+        const currentUser = window.authManager?.currentUser;
+        if (!currentUser) {
+            this.showErrorMessage('User not authenticated');
+            return;
+        }
+        
         try {
             // Update project to approved status
             await this.projectManager.updateProject(this.currentProject.id, {
                 editedText: finalText, // Store plain text
                 finalText: finalText, // Store plain final text
                 richContent: richContent, // Store rich text HTML
+                transcriptSegments: this.transcriptSegments,
                 formattedText: formattedFinalText, // Store formatted version for display
-                status: 'Approved',
-                approvedDate: new Date().toISOString(),
+                status: CONFIG.PROJECT_STATUS.APPROVED,
+                approved_by_user_id: currentUser.id,
+                approved_date: new Date().toISOString(),
                 lastEdited: new Date().toISOString()
             });
             
@@ -2982,6 +3604,7 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
             const updateData = {
                 editedText: draftText,
                 richContent: richContent,
+                transcriptSegments: this.transcriptSegments,
                 status: CONFIG.PROJECT_STATUS.NEEDS_REVIEW,
                 lastModified: new Date().toISOString()
             };
@@ -3043,6 +3666,136 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
             console.error('❌ Error resetting text:', error);
             this.showErrorMessage('Error resetting text: ' + error.message);
         }
+    }
+
+    setupTabSwitching() {
+        if (this.elements.tabSegments) {
+            this.elements.tabSegments.addEventListener('click', () => this.switchTab('segments'));
+        }
+        if (this.elements.tabFulltext) {
+            this.elements.tabFulltext.addEventListener('click', () => this.switchTab('fulltext'));
+        }
+    }
+
+    switchTab(tabName) {
+        // Hide all tab content and deactivate all tabs
+        if (this.elements.tabContentSegments) {
+            this.elements.tabContentSegments.classList.add('hidden');
+            this.elements.tabContentSegments.classList.remove('active');
+        }
+        if (this.elements.tabContentFulltext) {
+            this.elements.tabContentFulltext.classList.add('hidden');
+            this.elements.tabContentFulltext.classList.remove('active');
+        }
+        
+        if (this.elements.tabSegments) {
+            this.elements.tabSegments.classList.remove('active', 'border-blue-600', 'text-blue-600');
+            this.elements.tabSegments.classList.add('border-transparent', 'text-gray-600');
+        }
+        if (this.elements.tabFulltext) {
+            this.elements.tabFulltext.classList.remove('active', 'border-blue-600', 'text-blue-600');
+            this.elements.tabFulltext.classList.add('border-transparent', 'text-gray-600');
+        }
+
+        // Show selected tab and activate it
+        if (tabName === 'segments') {
+            if (this.elements.tabContentSegments) {
+                this.elements.tabContentSegments.classList.remove('hidden');
+                this.elements.tabContentSegments.classList.add('active');
+            }
+            if (this.elements.tabSegments) {
+                this.elements.tabSegments.classList.add('active', 'border-blue-600', 'text-blue-600');
+                this.elements.tabSegments.classList.remove('border-transparent', 'text-gray-600');
+            }
+        } else if (tabName === 'fulltext') {
+            if (this.elements.tabContentFulltext) {
+                this.elements.tabContentFulltext.classList.remove('hidden');
+                this.elements.tabContentFulltext.classList.add('active');
+            }
+            if (this.elements.tabFulltext) {
+                this.elements.tabFulltext.classList.add('active', 'border-blue-600', 'text-blue-600');
+                this.elements.tabFulltext.classList.remove('border-transparent', 'text-gray-600');
+            }
+        }
+    }
+
+    syncSegmentsFromFullText() {
+        // Extract plain text from full text editor
+        const editor = this.elements.transcriptionEditor;
+        if (!editor) return;
+
+        const plainText = editor.innerText || '';
+        
+        // Split into paragraphs and update segments
+        const paragraphs = plainText.split(/\n{1,2}/).filter(p => p.trim());
+        
+        // Update segments with new text (keep timing info)
+        paragraphs.forEach((para, index) => {
+            if (this.transcriptSegments[index]) {
+                this.transcriptSegments[index].text = para.trim();
+            }
+        });
+
+        // Re-render segments to show updates
+        this.renderTranscriptSegments(this.elements.transcriptSearch?.value || '');
+    }
+
+    scheduleReviewAutosave() {
+        if (!this.currentProject?.id) return;
+
+        if (this.reviewAutosaveTimeout) {
+            clearTimeout(this.reviewAutosaveTimeout);
+        }
+
+        this.reviewAutosaveTimeout = setTimeout(() => {
+            this.saveReviewStateToDb();
+        }, 1200);
+    }
+
+    async saveReviewStateToDb() {
+        if (!this.currentProject?.id || !this.elements.transcriptionEditor) return;
+
+        try {
+            const editedText = this.getRichTextContent(true).trim();
+            const richContent = this.getRichTextContent(false);
+
+            if (!editedText) return;
+
+            await this.projectManager.updateProject(this.currentProject.id, {
+                transcription: editedText,
+                editedText: editedText,
+                richContent: richContent,
+                transcriptSegments: this.transcriptSegments
+            });
+
+            this.currentProject.transcription = editedText;
+            this.currentProject.editedText = editedText;
+            this.currentProject.richContent = richContent;
+            this.currentProject.transcriptSegments = this.transcriptSegments;
+            this.currentProject.transcript_segments = this.transcriptSegments;
+        } catch (error) {
+            console.warn('⚠️ Background autosave failed:', error);
+        }
+    }
+
+    updateFullTextFromSegments() {
+        // Build full text from all segments
+        const fullText = this.transcriptSegments
+            .map(s => s.text)
+            .join('\n\n');
+
+        if (this.elements.transcriptionEditor) {
+            this.setRichTextContent(fullText, false);
+            this.updateWordCount();
+        }
+    }
+
+    persistAllChanges() {
+        // Update segments array with latest text
+        this.syncSegmentsFromFullText();
+        
+        // Persist to server
+        this.persistTranscriptSegments();
     }
 }
 

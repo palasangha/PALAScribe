@@ -3,7 +3,7 @@ class ServerProjectManager {
     constructor() {
         this.projects = [];
         this.currentProject = null;
-        this.apiBaseUrl = 'http://localhost:8765';
+        this.apiBaseUrl = window.location.origin;
         this.loadProjects();
     }
 
@@ -22,7 +22,8 @@ class ServerProjectManager {
                 },
                 body: JSON.stringify({
                     name: projectData.name.trim(),
-                    assignedTo: projectData.assignedTo ? projectData.assignedTo.trim() : ''
+                    assignedTo: projectData.assignedTo ? projectData.assignedTo.trim() : '',
+                    assignedToUserId: projectData.assignedToUserId || null
                 })
             });
 
@@ -259,6 +260,8 @@ class ServerProjectManager {
                 if (project) {
                     project.transcription = result.transcription;
                     project.formatted_text = result.formatted_text;
+                    project.transcript_segments = result.segments || [];
+                    project.transcriptSegments = result.segments || [];
                     project.word_count = result.word_count;
                     project.processing_time = result.processing_time;
                     project.status = 'completed';

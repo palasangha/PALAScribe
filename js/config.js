@@ -10,12 +10,9 @@ const CONFIG = {
 
     // Project Status Enum - Simplified Workflow
     PROJECT_STATUS: {
-        NEW: 'New',
-        PROCESSING: 'Processing',
-        NEEDS_REVIEW: 'Needs_Review',
-        COMPLETED: 'Completed',
-        APPROVED: 'Approved',
-        ERROR: 'Error'
+        IN_REVIEW: 'In Review',   // Transcription done, reviewer editing
+        REVIEWED: 'Reviewed',     // Reviewer marked complete, awaiting approval
+        APPROVED: 'Approved'      // Admin approved final version
     },
 
     // File Configuration
