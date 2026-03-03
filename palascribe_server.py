@@ -70,6 +70,10 @@ JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32))
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
 
+# Transcription status and logs tracking
+transcription_status = {}  # {project_id: {'start_time': timestamp, 'logs': [lines]}}
+MAX_LOG_LINES = 50  # Keep last 50 log lines per project
+
 # Pali corrections dictionary and function (moved from whisper_server.py)
 PALI_CORRECTIONS = {
     # Core Buddhist concepts
@@ -753,6 +757,54 @@ def verify_google_token(token):
         return None
 
 
+# Transcription status and logging helper functions
+def add_transcription_log(project_id, message):
+    """Add a log message to a project's transcription logs"""
+    with transcription_lock:
+        if project_id not in transcription_status:
+            transcription_status[project_id] = {
+                'start_time': time.time(),
+                'logs': []
+            }
+        
+        # Add timestamp to log message
+        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
+        transcription_status[project_id]['logs'].append(log_entry)
+        
+        # Keep only last MAX_LOG_LINES
+        if len(transcription_status[project_id]['logs']) > MAX_LOG_LINES:
+            transcription_status[project_id]['logs'] = transcription_status[project_id]['logs'][-MAX_LOG_LINES:]
+
+
+def get_transcription_status(project_id):
+    """Get current status and logs for a transcription"""
+    with transcription_lock:
+        if project_id not in transcription_status:
+            return {
+                'running': False,
+                'elapsed_time': 0,
+                'logs': [],
+                'status': 'Not started'
+            }
+        
+        status_data = transcription_status[project_id]
+        elapsed = time.time() - status_data['start_time']
+        
+        return {
+            'running': project_id in active_transcriptions,
+            'elapsed_time': round(elapsed, 1),
+            'logs': status_data['logs'][-20:],  # Return last 20 logs
+            'status': 'Processing...' if project_id in active_transcriptions else 'Completed'
+        }
+
+
+def clear_transcription_status(project_id):
+    """Clear status for a project after transcription completes"""
+    with transcription_lock:
+        if project_id in transcription_status:
+            del transcription_status[project_id]
+
+
 class DatabaseManager:
     """Handles all database operations for projects and audio files"""
     
@@ -1396,6 +1448,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.handle_get_users()
         elif path_only == '/projects':
             self.handle_get_projects()
+        elif '/projects/' in path_only and path_only.endswith('/status'):
+            # Handle transcription status endpoint
+            project_id = path_only.split('/')[2]
+            self.handle_get_transcription_status(project_id)
         elif path_only.startswith('/projects/'):
             project_id = path_only.split('/')[-1]
             self.handle_get_project(project_id)
@@ -1694,6 +1750,15 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.send_json_response({"users": users_list})
         except Exception as e:
             print(f"❌ Error getting users: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_get_transcription_status(self, project_id):
+        """Get transcription status and debug logs for a project"""
+        try:
+            status = get_transcription_status(project_id)
+            self.send_json_response(status)
+        except Exception as e:
+            print(f"❌ Error getting transcription status: {e}")
             self.send_error_response(500, str(e))
     
     def handle_get_projects(self):
@@ -2325,11 +2390,17 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"🎙️ Starting transcription for project {project_id}")
             print(f"🔧 Model: {model}, Language: {language}, Preview: {preview_mode}")
             
+            # Initialize transcription status and logging
+            add_transcription_log(project_id, f"🎙️ Starting transcription")
+            add_transcription_log(project_id, f"🔧 Model: {model}, Language: {language}, Preview: {preview_mode}")
+            
             # Update project status
             self.db_manager.update_project(project_id, {'status': 'In Review'})
             
             # Process the audio file
             print(f"🎵 Using audio file path: {audio_file_path}")
+            add_transcription_log(project_id, f"🎵 Using audio file: {audio_file_path}")
+            
             result = self.execute_whisper_command(
                 audio_file_path,
                 model=model,
@@ -2346,6 +2417,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 with transcription_lock:
                     if project_id in active_transcriptions and active_transcriptions[project_id].get('cancelled'):
                         print(f"🛑 Transcription was cancelled for project {project_id}, skipping result update")
+                        add_transcription_log(project_id, f"🛑 Processing cancelled")
                         self.send_json_response({'success': False, 'error': 'Processing was cancelled'})
                         return
                 
@@ -2355,19 +2427,23 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     'transcript_segments': json.dumps(result.get('segments', []), ensure_ascii=False),
                     'word_count': result.get('word_count', 0),
                     'processing_time': result.get('processing_time', 0),
+                    'processing_model': model,
                     'status': 'Needs_Review'  # Set to ready for review status
                 })
                 print(f"✅ Transcription completed for project {project_id}")
+                add_transcription_log(project_id, f"✅ Transcription completed ({result.get('word_count', 0)} words, {result.get('processing_time', 0):.1f}s)")
             else:
                 # For failed transcriptions, also check if it was cancelled
                 if result.get('error') == 'Processing was cancelled':
                     print(f"🛑 Transcription was cancelled for project {project_id}")
+                    add_transcription_log(project_id, f"🛑 Transcription cancelled")
                 else:
                     self.db_manager.update_project(project_id, {
                         'status': 'In Review',  # Reset to In Review on error
                         'error_message': result.get('error', 'Unknown error')
                     })
                     print(f"❌ Transcription failed for project {project_id}")
+                    add_transcription_log(project_id, f"❌ Error: {result.get('error', 'Unknown error')}")
             
             self.send_json_response(result)
             
@@ -2618,14 +2694,20 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         processed_audio_path = audio_file_path
         if preview_mode:
             print(f"🔍 Preview mode enabled - processing only first {preview_duration} seconds")
+            if project_id:
+                add_transcription_log(project_id, f"🔍 Preview mode: {preview_duration}s")
             processed_audio_path = self.trim_audio_file(audio_file_path, preview_duration)
             if processed_audio_path:
                 # Update file size for the trimmed version
                 file_size = os.path.getsize(processed_audio_path)
                 file_size_mb = file_size / (1024 * 1024)
                 print(f"✅ Audio trimmed to {file_size_mb:.1f}MB")
+                if project_id:
+                    add_transcription_log(project_id, f"✅ Audio trimmed to {file_size_mb:.1f}MB")
             else:
                 print("⚠️ Warning: Audio trimming failed, processing full file")
+                if project_id:
+                    add_transcription_log(project_id, f"⚠️ Trimming failed, using full file")
                 processed_audio_path = audio_file_path
         
         # Normalize language for Whisper CLI (accepts names, but short codes are safer)
@@ -2667,6 +2749,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         ]
         
         print(f"🚀 Executing command: {' '.join(command)}")
+        if project_id:
+            add_transcription_log(project_id, f"🚀 Starting Whisper (model: {model}, file: {file_size_mb:.1f}MB)")
         start_time = time.time()
         
         try:
@@ -2724,6 +2808,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
 
                     estimated_minutes = max(45, int(file_size_mb * minutes_per_mb))
                     timeout_seconds = min(estimated_minutes * 60, 28800)  # cap at 8 hours
+                    if project_id:
+                        accel_status = "with MPS acceleration" if acceleration_ok else "CPU-bound"
+                        add_transcription_log(project_id, f"⏱️ Timeout: {estimated_minutes}min ({accel_status})")
             
             print(f"⏰ Setting timeout to {timeout_seconds} seconds")
             
@@ -2734,6 +2821,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
             
+            if project_id:
+                add_transcription_log(project_id, f"🔄 Initializing Whisper subprocess...")
             print(f"🔍 [POPEN_PRE] About to create subprocess with command: {command[0]}")
             print(f"🔍 [POPEN_PRE] Full command: {' '.join(command)}")
             print(f"🔍 [POPEN_PRE] Working dir: {project_dir}")
@@ -2751,13 +2840,19 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     env=env,
                     preexec_fn=None  # Ensure clean subprocess
                 )
+                if project_id:
+                    add_transcription_log(project_id, f"✨ Whisper process running (PID: {process.pid})")
                 print(f"🔍 [POPEN_POST] Process created successfully, PID: {process.pid}")
                 sys.stdout.flush()
             except Exception as popen_error:
+                if project_id:
+                    add_transcription_log(project_id, f"❌ Failed to start process: {str(popen_error)[:50]}")
                 print(f"❌ [POPEN_ERROR] Failed to create subprocess: {popen_error}")
                 sys.stdout.flush()
                 raise
 
+            if project_id:
+                add_transcription_log(project_id, f"📊 Reading transcription output...")
             print(f"🔍 [WHISPER] Process started, reading streams...")
             sys.stdout.flush()
             # Stream logs live while the process is running
@@ -2827,6 +2922,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 elapsed = time.time() - start_time
                 if elapsed > timeout_seconds:
                     timed_out = True
+                    if project_id:
+                        add_transcription_log(project_id, f"⏰ Timeout reached ({int(elapsed)}s > {timeout_seconds}s)")
                     print(f"⏰ Process timed out after {timeout_seconds} seconds")
                     process.kill()
                     break
@@ -2860,6 +2957,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     with transcription_lock:
                         del active_transcriptions[project_id]
 
+                if project_id:
+                    add_transcription_log(project_id, f"❌ Processing timed out")
                 return {
                     'success': False,
                     'error': f'Processing timed out after {timeout_seconds} seconds',
@@ -2871,6 +2970,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             # Check if process was cancelled (return code -15 = SIGTERM)
             if process.returncode == -15:
+                if project_id:
+                    add_transcription_log(project_id, f"🛑 Process cancelled by user")
                 print(f"🛑 Process was terminated (SIGTERM) for project {project_id}")
                 # Clean up tracking if still exists
                 if project_id:
@@ -2888,6 +2989,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 with transcription_lock:
                     if project_id in active_transcriptions:
                         if active_transcriptions[project_id].get('cancelled'):
+                            if project_id:
+                                add_transcription_log(project_id, f"🛑 Processing cancelled")
                             print(f"🛑 Process was cancelled for project {project_id}")
                             del active_transcriptions[project_id]
                             return {
@@ -2898,6 +3001,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                         # Remove from tracking since it completed
                         del active_transcriptions[project_id]
             
+            if project_id:
+                add_transcription_log(project_id, f"⏱️ Whisper completed in {processing_time:.1f}s (exit code: {process.returncode})")
             print(f"✅ Whisper processing completed in {processing_time:.1f} seconds")
             print(f"🔍 Command return code: {process.returncode}")
             

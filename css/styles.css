@@ -1143,152 +1143,22 @@
     z-index: 50 !important;
 }
 
-/* Fix button visibility issues - Enhanced with better contrast */
-#view-review button,
-#view-review .bg-gray-500,
-#view-review .bg-blue-500,
-#view-review .bg-green-600 {
-    position: relative !important;
-    color: white !important;
-    border: 1px solid rgba(0, 0, 0, 0.2) !important;
+/* Basic button styling - let Tailwind handle it */
+#view-review button {
+    position: relative;
+    z-index: 45;
+    pointer-events: auto;
 }
 
-/* Export PDF button specific styling - UPDATED */
-#btn-export-pdf,
-#btn-export-docx,
-button[id*="export"] {
-    background-color: #dc2626 !important; /* Red for PDF */
+/* Export PDF button specific styling */
+#btn-export-pdf {
+    background-color: #dc2626 !important;
     color: white !important;
     border: 1px solid #b91c1c !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
 }
 
-#btn-export-pdf:hover,
-#btn-export-docx:hover,
-button[id*="export"]:hover {
+#btn-export-pdf:hover {
     background-color: #b91c1c !important;
-    border-color: #991b1b !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3) !important;
-}
-
-/* Smart Headers button styling */
-#btn-smart-headers {
-    background-color: #7c3aed !important; /* Purple for smart features */
-    color: white !important;
-    border: 1px solid #6d28d9 !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
-}
-
-#btn-smart-headers:hover {
-    background-color: #6d28d9 !important;
-    border-color: #5b21b6 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 8px rgba(124, 58, 237, 0.3) !important;
-}
-
-/* Back button visibility */
-#btn-back,
-button[id*="back"] {
-    background-color: #6b7280 !important;
-    color: white !important;
-    border: 1px solid #4b5563 !important;
-    font-weight: 500 !important;
-}
-
-#btn-back:hover,
-button[id*="back"]:hover {
-    background-color: #4b5563 !important;
-    border-color: #374151 !important;
-}
-
-/* General button enhancements */
-#view-review button {
-    z-index: 45 !important;
-    pointer-events: auto !important;
-    display: inline-flex !important;
-    align-items: center !important;
-}
-
-/* Specific button color fixes with maximum specificity */
-#view-review #btn-back-to-projects,
-button#btn-back-to-projects {
-    background-color: #6b7280 !important; /* gray-500 */
-    color: white !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    display: inline-flex !important;
-    z-index: 50 !important;
-    border: none !important;
-    padding: 0.25rem 0.5rem !important;
-    border-radius: 0.25rem !important;
-    font-size: 0.75rem !important;
-    line-height: 1rem !important;
-    cursor: pointer !important;
-}
-
-#view-review #btn-back-to-projects:hover,
-button#btn-back-to-projects:hover {
-    background-color: #4b5563 !important; /* gray-600 */
-    color: white !important;
-}
-
-#view-review #btn-save-draft,
-button#btn-save-draft {
-    background-color: #3b82f6 !important; /* blue-500 */
-    color: white !important;
-    border: none !important;
-    padding: 0.375rem 0.75rem !important;
-    border-radius: 0.25rem !important;
-    font-size: 0.875rem !important;
-    line-height: 1.25rem !important;
-    cursor: pointer !important;
-    z-index: 50 !important;
-}
-
-#view-review #btn-save-draft:hover,
-button#btn-save-draft:hover {
-    background-color: #2563eb !important; /* blue-600 */
-    color: white !important;
-}
-
-#view-review #btn-approve-final,
-button#btn-approve-final {
-    background-color: #059669 !important; /* green-600 */
-    color: white !important;
-    border: none !important;
-    padding: 0.375rem 1rem !important;
-    border-radius: 0.25rem !important;
-    font-size: 0.875rem !important;
-    line-height: 1.25rem !important;
-    font-weight: 500 !important;
-    cursor: pointer !important;
-    z-index: 50 !important;
-}
-
-#view-review #btn-approve-final:hover,
-button#btn-approve-final:hover {
-    background-color: #047857 !important; /* green-700 */
-    color: white !important;
-}
-
-/* Override any Tailwind classes that might conflict */
-.bg-gray-500#btn-back-to-projects,
-.bg-blue-500#btn-save-draft,
-.bg-green-600#btn-approve-final {
-    background-color: inherit !important;
-    color: white !important;
-}
-
-/* Force button text to be white regardless of other styles */
-#view-review button span,
-#view-review button,
-#btn-back-to-projects *,
-#btn-save-draft *,
-#btn-approve-final * {
-    color: white !important;
 }
 
 /* Preview section styling */

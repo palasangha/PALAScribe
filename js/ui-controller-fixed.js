@@ -646,8 +646,8 @@ class UIController {
         // Set the processing project ID for cancellation purposes
         this.processingProjectId = projectId;
         
-        // Show background processing UI
-        this.showBackgroundProcessing(`Processing ${projectName}...`);
+        // Show background processing UI with project ID for polling
+        this.showBackgroundProcessing(`Processing ${projectName}...`, projectId);
         
         try {
             // Process audio (this will use the background processing UI)
@@ -1072,9 +1072,9 @@ class UIController {
     }
 
     // Background processing UI methods
-    showBackgroundProcessing(message) {
-        console.log('📝 Starting background processing: ' + message);
-        this.showTranscriptionProgressModal(message);
+    showBackgroundProcessing(message, projectId = null) {
+        console.log('📝 Starting background processing: ' + message, 'Project:', projectId);
+        this.showTranscriptionProgressModal(message, projectId);
     }
 
     hideBackgroundProcessing() {
@@ -1087,8 +1087,13 @@ class UIController {
     }
 
     // New transcription modal methods
-    showTranscriptionProgressModal(message = "Processing your audio file...") {
-        console.log('🎙️ Showing transcription progress modal');
+    showTranscriptionProgressModal(message = "Processing your audio file...", projectId = null) {
+        console.log('🎙️ Showing transcription progress modal for project:', projectId);
+        
+        // Set the current project BEFORE starting the timer so polling uses the right ID
+        if (projectId) {
+            this.currentProject = projectId;
+        }
         
         // Initialize the modal
         this.transcriptionStartTime = Date.now();
@@ -1116,7 +1121,7 @@ class UIController {
             this.elements.transcriptionProgressModal.classList.remove('hidden');
         }
         
-        // Start the timer update
+        // Start the timer update (which also starts polling)
         this.startTranscriptionTimer();
     }
 
@@ -1198,12 +1203,78 @@ class UIController {
         this.transcriptionTimer = setInterval(() => {
             this.updateTranscriptionTimer();
         }, 1000);
+        
+        // Also start polling for status updates every 2 seconds
+        if (this.currentProject) {
+            this.startStatusPolling(this.currentProject);
+        }
     }
 
     stopTranscriptionTimer() {
         if (this.transcriptionTimer) {
             clearInterval(this.transcriptionTimer);
             this.transcriptionTimer = null;
+        }
+        
+        // Stop status polling
+        this.stopStatusPolling();
+    }
+
+    // Poll server for transcription status and logs
+    async startStatusPolling(projectId) {
+        console.log('🔄 Starting status polling for project:', projectId);
+        this.statusPollingInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/projects/${projectId}/status`);
+                if (!response.ok) {
+                    console.warn('⚠️ Status poll failed:', response.status);
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('📊 Status poll response:', data);
+                
+                // Update logs if available
+                if (data.logs && Array.isArray(data.logs)) {
+                    console.log('📝 Received', data.logs.length, 'log lines');
+                    this.updateTranscriptionLogs(data.logs);
+                }
+                
+                // Check if still running
+                if (!data.running && this.isProcessing) {
+                    console.log('✅ Transcription completed, stopping poll');
+                    this.stopStatusPolling();
+                }
+            } catch (error) {
+                console.warn('⚠️ Status polling error:', error);
+                // Don't stop polling on error, keep trying
+            }
+        }, 2000); // Poll every 2 seconds
+    }
+
+    stopStatusPolling() {
+        if (this.statusPollingInterval) {
+            clearInterval(this.statusPollingInterval);
+            this.statusPollingInterval = null;
+        }
+    }
+
+    // Update the logs display with new entries
+    updateTranscriptionLogs(logs) {
+        if (!this.elements.transcriptionLiveLogs || !Array.isArray(logs)) {
+            console.warn('⚠️ Cannot update logs - missing element or invalid logs array');
+            return;
+        }
+        
+        console.log('📝 Updating logs display with', logs.length, 'lines');
+        // Format logs into a readable display
+        const logText = logs.join('\n');
+        this.elements.transcriptionLiveLogs.textContent = logText;
+        
+        // Auto-scroll to bottom
+        if (this.elements.transcriptionLiveLogs.parentElement) {
+            this.elements.transcriptionLiveLogs.parentElement.scrollTop = 
+                this.elements.transcriptionLiveLogs.parentElement.scrollHeight;
         }
     }
 
@@ -1730,8 +1801,9 @@ class UIController {
             // Display processing model if available
             const modelDisplay = document.getElementById('processing-model-display');
             const modelName = document.getElementById('model-name');
-            if (modelDisplay && modelName && project.processingModel) {
-                modelName.textContent = project.processingModel;
+            const model = project.processingModel || project.processing_model;
+            if (modelDisplay && modelName && model) {
+                modelName.textContent = model;
                 modelDisplay.classList.remove('hidden');
             } else if (modelDisplay) {
                 modelDisplay.classList.add('hidden');
@@ -2783,11 +2855,16 @@ class UIController {
             event.preventDefault();
             event.stopPropagation();
             const time = parseFloat(timestampClick.dataset.time);
+            console.log('⏱️ Timestamp clicked, seeking to:', time);
             if (Number.isFinite(time)) {
                 const audio = this.getReviewAudioElement();
                 if (audio) {
+                    console.log('🎵 Audio element found, current time:', audio.currentTime, 'seeking to:', time);
                     audio.currentTime = Math.max(0, time);
-                    audio.play().catch(err => console.log('Audio play failed:', err));
+                    console.log('✅ Seek set, now playing. Audio currentTime:', audio.currentTime);
+                    audio.play().catch(err => console.log('❌ Audio play failed:', err));
+                } else {
+                    console.warn('⚠️ Audio element not found');
                 }
             }
             return;
@@ -2816,11 +2893,14 @@ class UIController {
         const segment = this.transcriptSegments.find(item => item.id === segmentId);
         if (!segment) return;
 
+        console.log('📍 Segment row clicked, segment start time:', segment.start);
         this.setActiveTranscriptSegment(segmentId, false);
 
         const audio = this.getReviewAudioElement();
         if (audio && segment.start !== undefined && Number.isFinite(segment.start)) {
+            console.log('🎵 Seeking audio to segment start:', segment.start);
             audio.currentTime = Math.max(0, segment.start);
+            console.log('✅ Audio currentTime set to:', audio.currentTime);
             if (this.transcriptSyncEnabled) {
                 audio.play().catch(() => {});
             }
