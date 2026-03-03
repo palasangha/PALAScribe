@@ -27,6 +27,9 @@ wheels/
 *.egg
 MANIFEST
 
+# Local environment file with secrets
+.env
+
 # Virtual environments
 whisper-env/
 venv/
