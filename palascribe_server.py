@@ -2499,7 +2499,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.send_error_response(500, str(e))
     
     def handle_get_audio(self, filename):
-        """Serve audio files"""
+        """Serve audio files with range request support for seeking"""
         try:
             file_path = Path("uploads") / filename
             if not file_path.exists():
@@ -2515,39 +2515,85 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 '.ogg': 'audio/ogg'
             }
             content_type = content_types.get(extension, 'audio/mpeg')
-
-            # Send file
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Content-Length', str(file_path.stat().st_size))
-            self.end_headers()
-
-            with open(file_path, 'rb') as f:
+            
+            file_size = file_path.stat().st_size
+            
+            # Check for Range header (required for seeking in audio/video)
+            range_header = self.headers.get('Range')
+            
+            if range_header:
+                # Parse range header (e.g., "bytes=1000-2000" or "bytes=1000-")
                 try:
-                    shutil.copyfileobj(f, self.wfile)
-                except (BrokenPipeError, ConnectionResetError) as conn_err:
-                    # Client disconnected while streaming audio; log and stop quietly.
-                    print(f"⚠️ Client disconnected during audio streaming: {conn_err}")
-                    return
-                except OSError as oe:
-                    # Treat EPIPE (broken pipe) as client disconnect on some platforms
-                    if getattr(oe, 'errno', None) in (32,):
-                        print(f"⚠️ Socket error during streaming (treated as client disconnect): {oe}")
+                    byte_range = range_header.replace('bytes=', '').split('-')
+                    start = int(byte_range[0]) if byte_range[0] else 0
+                    end = int(byte_range[1]) if byte_range[1] else file_size - 1
+                    
+                    # Validate range
+                    if start >= file_size or start < 0 or end >= file_size:
+                        self.send_error(416, "Requested Range Not Satisfiable")
                         return
-                    raise
+                    
+                    content_length = end - start + 1
+                    
+                    # Send 206 Partial Content response
+                    self.send_response(206)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+                    self.send_header('Content-Length', str(content_length))
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    
+                    # Send the requested byte range
+                    with open(file_path, 'rb') as f:
+                        f.seek(start)
+                        bytes_to_send = content_length
+                        chunk_size = 8192
+                        
+                        while bytes_to_send > 0:
+                            chunk = f.read(min(chunk_size, bytes_to_send))
+                            if not chunk:
+                                break
+                            try:
+                                self.wfile.write(chunk)
+                                bytes_to_send -= len(chunk)
+                            except (BrokenPipeError, ConnectionResetError):
+                                print(f"⚠️ Client disconnected during range streaming")
+                                return
+                    
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Invalid range header: {range_header} - {e}")
+                    self.send_error(400, "Bad Range Header")
+                    return
+            else:
+                # No range request - send entire file
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Content-Length', str(file_size))
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+
+                with open(file_path, 'rb') as f:
+                    try:
+                        shutil.copyfileobj(f, self.wfile)
+                    except (BrokenPipeError, ConnectionResetError) as conn_err:
+                        print(f"⚠️ Client disconnected during audio streaming: {conn_err}")
+                        return
+                    except OSError as oe:
+                        if getattr(oe, 'errno', None) in (32,):
+                            print(f"⚠️ Socket error during streaming: {oe}")
+                            return
+                        raise
 
         except Exception as e:
-            # If the client disconnected (BrokenPipe/ConnectionReset), don't try to
-            # write an error response which will also fail with BrokenPipe.
             if isinstance(e, (BrokenPipeError, ConnectionResetError)):
                 print(f"⚠️ Client disconnected before error handling: {e}")
                 return
-            # Other exceptions should return a 500 to the client if possible
             try:
                 self.send_error(500, str(e))
             except Exception:
-                # If sending the error also fails (e.g., broken pipe), just log it.
+                pass
                 print(f"❌ Failed to send error response after exception: {e}")
     
     def handle_audio_processing(self):

@@ -1857,12 +1857,31 @@ class UIController {
             
             if (audioUrl) {
                 console.log('🎵 Creating audio player with URL:', audioUrl);
-                this.elements.reviewAudioPlayer.innerHTML = `
-                    <audio id="review-audio" controls class="min-w-0 max-w-sm">
-                        <source src="${audioUrl}" type="${project.audioType || 'audio/mpeg'}">
-                        Your browser does not support the audio element.
-                    </audio>
-                `;
+                
+                // Create audio element programmatically to ensure src attribute is set properly
+                const audioContainer = this.elements.reviewAudioPlayer;
+                audioContainer.innerHTML = ''; // Clear any existing content
+                
+                const audio = document.createElement('audio');
+                audio.id = 'review-audio';
+                audio.controls = true;
+                audio.className = 'min-w-0 max-w-sm';
+                audio.preload = 'metadata'; // Ensure metadata is preloaded
+                audio.src = audioUrl;
+                
+                audioContainer.appendChild(audio);
+                
+                // Explicitly call load() to ensure the browser initializes properly
+                audio.load();
+                
+                console.log('🎵 Audio element created and loaded with src:', audio.src);
+                
+                // Add debug listeners to track audio state changes
+                audio.addEventListener('loadstart', () => console.log('🔄 loadstart event - audio is loading'));
+                audio.addEventListener('loadedmetadata', () => console.log('📊 loadedmetadata - readyState:', audio.readyState));
+                audio.addEventListener('canplay', () => console.log('✅ canplay - audio ready, duration:', audio.duration));
+                audio.addEventListener('emptied', () => console.log('⚠️ EMPTIED event - audio was reset!'));
+                audio.addEventListener('abort', () => console.log('⚠️ ABORT event - loading aborted!'));
                 
                 // Set up keyboard shortcuts for audio control
                 this.setupAudioKeyboardShortcuts();
@@ -2914,13 +2933,89 @@ class UIController {
         console.log('📍 Segment row clicked, segment start time:', segment.start);
         this.setActiveTranscriptSegment(segmentId, false);
 
-        const audio = this.getReviewAudioElement();
-        if (audio && segment.start !== undefined && Number.isFinite(segment.start)) {
-            console.log('🎵 Seeking audio to segment start:', segment.start);
-            audio.currentTime = Math.max(0, segment.start);
-            console.log('✅ Audio currentTime set to:', audio.currentTime);
-            if (this.transcriptSyncEnabled) {
-                audio.play().catch(() => {});
+        const audio = document.getElementById('review-audio');
+        
+        if (!audio) {
+            console.error('❌ No audio element found!');
+            return;
+        }
+        
+        if (segment.start !== undefined && Number.isFinite(segment.start)) {
+            const targetTime = Math.max(0, segment.start);
+            console.log('🎯 Seeking to:', targetTime);
+            
+            try {
+                if (!Number.isFinite(audio.duration)) {
+                    console.warn('⚠️ Audio duration not valid:', audio.duration);
+                    return;
+                }
+                
+                // Check if target time is within buffered ranges
+                let isBuffered = false;
+                for (let i = 0; i < audio.buffered.length; i++) {
+                    if (targetTime >= audio.buffered.start(i) && targetTime <= audio.buffered.end(i)) {
+                        isBuffered = true;
+                        break;
+                    }
+                }
+                
+                console.log('📊 Buffered ranges:', audio.buffered.length);
+                for (let i = 0; i < audio.buffered.length; i++) {
+                    console.log(`   Range ${i}: ${audio.buffered.start(i)} - ${audio.buffered.end(i)}`);
+                }
+                console.log('📊 Target time buffered?', isBuffered ? '✅ YES' : '❌ NO');
+                
+                // Function to perform the actual seek
+                const doSeek = () => {
+                    console.log('⏳ Performing seek to:', targetTime);
+                    audio.currentTime = targetTime;
+                    console.log('✅ Seek set, currentTime:', audio.currentTime);
+                    
+                    if (!audio.paused) {
+                        console.log('▶️ Already playing, seek complete');
+                    } else {
+                        audio.play().catch(err => console.log('❌ Play error:', err.message));
+                    }
+                };
+                
+                // If not buffered, we need to start loading first
+                if (!isBuffered && audio.buffered.length === 0) {
+                    console.log('📥 No data buffered yet - starting playback to trigger buffering');
+                    
+                    // Play to trigger buffering, then seek once we have data
+                    const onProgress = () => {
+                        console.log('📊 Progress event - checking buffer...');
+                        if (audio.buffered.length > 0) {
+                            console.log(`✅ Buffer available: ${audio.buffered.start(0)} - ${audio.buffered.end(0)}`);
+                            audio.removeEventListener('progress', onProgress);
+                            audio.pause(); // Pause the playback
+                            doSeek(); // Now seek
+                        }
+                    };
+                    
+                    audio.addEventListener('progress', onProgress);
+                    audio.play().catch(err => {
+                        console.log('❌ Play error:', err.message);
+                        audio.removeEventListener('progress', onProgress);
+                    });
+                    
+                    // Timeout fallback in case progress doesn't fire
+                    setTimeout(() => {
+                        audio.removeEventListener('progress', onProgress);
+                        if (audio.buffered.length > 0) {
+                            doSeek();
+                        } else {
+                            console.warn('⚠️ Timeout: Still no buffer after 2 seconds');
+                        }
+                    }, 2000);
+                } else {
+                    // Data is buffered, seek directly
+                    console.log('✅ Data is buffered, seeking now');
+                    doSeek();
+                }
+                
+            } catch (e) {
+                console.error('❌ Exception:', e.message);
             }
         }
     }
