@@ -988,19 +988,19 @@ class UIController {
         return htmlParagraphs.join('\n\n');
     }
 
-    // Highlight Pali terms in text (only words with Pali diacritics)
+    // Highlight Pali terms in text (words with diacritics that were converted server-side)
     highlightPaliTerms(text) {
         console.log('🔍 Highlighting Pali terms in text:', text.substring(0, 200));
         
-        // ONLY highlight words that already contain Pali diacritics
-        // Do NOT convert English words to Pali - that's done server-side during transcription
+        // Simply highlight words that contain Pali diacritics
+        // Server has already converted English → Pali with proper diacritics during transcription
         const paliDiacriticPattern = /\b\w*[āīūṅñṭḍṇḷṃḥṣṛĀĪŪṄÑṬḌṆḶṂḤṢṚ]\w*\b/g;
-        
         const matches = text.match(paliDiacriticPattern);
+        
         if (matches) {
             console.log(`✨ Found ${matches.length} Pali words with diacritics:`, matches.slice(0, 5));
             const modifiedText = text.replace(paliDiacriticPattern, '<span class="pali-text">$&</span>');
-            console.log('✅ Text modified with Pali highlighting');
+            console.log('✅ Highlighted Pali words');
             return modifiedText;
         } else {
             console.log('⚠️ No Pali diacritics found - returning original text');
@@ -2801,14 +2801,49 @@ class UIController {
 
         list.innerHTML = visible.map(segment => {
             const timestamp = this.formatSegmentTime(segment.start);
-            const text = UTILS.escapeHtml(segment.text || '').substring(0, 120);
+            // Truncate first, then apply Pali highlighting to avoid broken HTML tags
+            const rawText = (segment.text || '').substring(0, 120);
+            
+            // Debug: log if we have Pali diacritics in the raw text
+            const hasDiacritics = /[āīūṅñṭḍṇḷṃḥṣṛĀĪŪṄÑṬḌṆḶṂḤṢṚ]/.test(rawText);
+            if (hasDiacritics) {
+                console.log('📝 Timeline segment has diacritics:', rawText.substring(0, 50));
+            }
+            
+            const text = this.highlightPaliTerms(UTILS.escapeHtml(rawText));
             const isActive = this.activeTranscriptSegmentId === segment.id;
             const bgColor = isActive ? '#dbeafe' : '#ffffff';
             const borderColor = isActive ? '#7aa2d6' : '#d9e2ee';
             const confidence = Number.isFinite(segment.confidence) ? Math.round(segment.confidence * 100) : null;
-            const confidenceMarkup = confidence !== null
-                ? `<span style="margin-left: 8px; font-size: 11px; color: #475569; background: #f1f5f9; border: 1px solid #dbe2ea; border-radius: 999px; padding: 2px 7px;">Conf ${confidence}%</span>`
-                : '<span style="margin-left: 8px; font-size: 11px; color: #94a3b8; background: #f8fafc; border: 1px dashed #dbe2ea; border-radius: 999px; padding: 2px 7px;">Conf n/a</span>';
+            
+            // Color-code confidence: red < 70%, yellow 70-85%, green >= 85%
+            let confidenceMarkup;
+            if (confidence !== null) {
+                let confColor, confBg, confBorder, confIcon;
+                if (confidence < 70) {
+                    // Low confidence - needs review
+                    confColor = '#dc2626'; // red text
+                    confBg = '#fef2f2'; // red background
+                    confBorder = '#fecaca'; // red border
+                    confIcon = '⚠️';
+                } else if (confidence < 85) {
+                    // Medium confidence - double check recommended
+                    confColor = '#ca8a04'; // yellow text
+                    confBg = '#fefce8'; // yellow background
+                    confBorder = '#fde68a'; // yellow border
+                    confIcon = '⚡';
+                } else {
+                    // High confidence - likely accurate
+                    confColor = '#16a34a'; // green text
+                    confBg = '#f0fdf4'; // green background
+                    confBorder = '#bbf7d0'; // green border
+                    confIcon = '✓';
+                }
+                confidenceMarkup = `<span style="margin-left: 8px; font-size: 11px; font-weight: 600; color: ${confColor}; background: ${confBg}; border: 1px solid ${confBorder}; border-radius: 999px; padding: 2px 8px;" title="Whisper confidence score: ${confidence}% ${confidence < 70 ? '(Low - review carefully)' : confidence < 85 ? '(Medium - double check)' : '(High - likely accurate)'}">${confIcon} ${confidence}%</span>`;
+            } else {
+                confidenceMarkup = '<span style="margin-left: 8px; font-size: 11px; color: #94a3b8; background: #f8fafc; border: 1px dashed #dbe2ea; border-radius: 999px; padding: 2px 7px;" title="Confidence score not available">n/a</span>';
+            }
+            
             return `
                 <div class="transcript-segment-row" data-segment-id="${segment.id}" data-start-time="${segment.start}" style="background: ${bgColor}; padding: 12px 10px; border-radius: 8px; cursor: pointer; border: 1px solid ${borderColor}; border-left: 3px solid #8eb4df; transition: all 0.2s; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                     <div style="flex: 1; min-width: 0;">

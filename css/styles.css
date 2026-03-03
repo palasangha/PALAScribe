@@ -200,12 +200,7 @@
     background: #a8a8a8;
 }
 
-/* Pali Text Formatting */
-.pali-word {
-    @apply font-semibold text-purple-700 bg-purple-50 px-1 rounded;
-}
-
-/* Pali Text Styling */
+/* Pali Text Styling - subtle highlighting for words with diacritics */
 .pali-text {
     font-family: 'Times New Roman', 'Noto Serif', serif;
     font-weight: 500;

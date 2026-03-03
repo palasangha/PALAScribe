@@ -153,7 +153,9 @@ class AudioProcessor {
         if (!text) return '';
         
         // Use Pali processor to format words
-        return paliProcessor.formatPaliWords(text);
+        // Pali words are already converted server-side with proper diacritics
+        // No need for client-side processing
+        return text;
     }
 
     // Generate DOCX file from formatted text

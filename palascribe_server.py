@@ -3256,14 +3256,28 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             if transcription.strip():
                 print(f"📝 Generated transcription: {word_count} words")
                 
-                # Apply Pali corrections
-                print("🔍 Applying Pali corrections...")
+                # Apply Pali corrections to full transcription
+                print("🔍 Applying Pali corrections to transcription...")
                 original_transcription = transcription
                 transcription = apply_pali_corrections(transcription)
                 
                 if transcription != original_transcription:
-                    print("✅ Pali corrections were applied!")
+                    print("✅ Pali corrections were applied to transcription!")
                     word_count = len(transcription.split())
+                
+                # Apply Pali corrections to each segment as well
+                if segments:
+                    print(f"🔍 Applying Pali corrections to {len(segments)} segments...")
+                    corrected_count = 0
+                    for segment in segments:
+                        if 'text' in segment and segment['text']:
+                            original_text = segment['text']
+                            corrected_text = apply_pali_corrections(original_text)
+                            if corrected_text != original_text:
+                                segment['text'] = corrected_text
+                                corrected_count += 1
+                    if corrected_count > 0:
+                        print(f"✅ Applied Pali corrections to {corrected_count} segments")
                 
                 # Apply text formatting as post-processing
                 print("📄 Applying text formatting...")
