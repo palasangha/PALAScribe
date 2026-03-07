@@ -20,6 +20,7 @@ class UIController {
             this._boundTranscriptAudioTimeUpdate = null;
             this.reviewAutosaveTimeout = null;
             this.validReviewers = [];
+            this.lastAutoProjectName = '';
             
             // Transcription modal timer properties
             this.transcriptionTimer = null;
@@ -484,9 +485,13 @@ class UIController {
                 if (file) {
                     // Extract filename without extension
                     const fileName = file.name.replace(/\.[^/.]+$/, "");
-                    const projectNameInput = document.getElementById('project-name');
+                    const projectNameInput = this.elements.projectName;
                     if (projectNameInput) {
-                        projectNameInput.value = fileName;
+                        const currentName = projectNameInput.value.trim();
+                        if (!currentName || currentName === this.lastAutoProjectName) {
+                            projectNameInput.value = fileName;
+                            this.lastAutoProjectName = fileName;
+                        }
                     }
                     
                     // Show file size warning for large files
@@ -496,22 +501,9 @@ class UIController {
         }
 
         // Transcription progress modal events
-        if (this.elements.minimizeTranscriptionModal) {
-            this.elements.minimizeTranscriptionModal.addEventListener('click', () => {
-                this.minimizeTranscriptionModal();
-            });
-        }
-
         if (this.elements.cancelTranscriptionProcessing) {
             this.elements.cancelTranscriptionProcessing.addEventListener('click', () => {
                 this.showCancelProcessingModal();
-            });
-        }
-
-        // Status bar click to restore modal
-        if (this.elements.processingStatusBar) {
-            this.elements.processingStatusBar.addEventListener('click', () => {
-                this.restoreTranscriptionModal();
             });
         }
     }
@@ -1098,7 +1090,7 @@ class UIController {
     }
 
     // New transcription modal methods
-    showTranscriptionProgressModal(message = "Processing your audio file...", projectId = null) {
+    showTranscriptionProgressModal(message = "Preparing transcription...", projectId = null) {
         console.log('🎙️ Showing transcription progress modal for project:', projectId);
         
         // Set the current project BEFORE starting the timer so polling uses the right ID
@@ -1112,7 +1104,7 @@ class UIController {
         
         // Reset modal content
         if (this.elements.transcriptionProgressMessage) {
-            this.elements.transcriptionProgressMessage.textContent = message;
+            this.elements.transcriptionProgressMessage.textContent = message || 'Preparing transcription...';
         }
         if (this.elements.transcriptionProgressBar) {
             this.elements.transcriptionProgressBar.style.width = '0%';
@@ -1156,22 +1148,11 @@ class UIController {
         // Hide the modal
         this.hideTranscriptionProgressModal();
         
-        // Show the old status bar as minimized view
-        if (this.elements.processingStatusBar) {
-            this.elements.processingStatusBar.classList.remove('hidden');
-            if (this.elements.processingStatusMessage) {
-                this.elements.processingStatusMessage.textContent = 'Transcribing... (click to restore)';
-            }
-        }
+        // Minimize flow intentionally disabled for simpler UX.
     }
 
     restoreTranscriptionModal() {
         console.log('🎙️ Restoring transcription modal from status bar');
-        
-        // Hide the status bar
-        if (this.elements.processingStatusBar) {
-            this.elements.processingStatusBar.classList.add('hidden');
-        }
         
         // Show the modal
         if (this.elements.transcriptionProgressModal) {
@@ -1201,10 +1182,7 @@ class UIController {
             this.elements.transcriptionFileInfo.textContent = fileInfo;
         }
         
-        // Update status bar message for minimized view
-        if (this.elements.processingStatusMessage) {
-            this.elements.processingStatusMessage.textContent = message;
-        }
+        // No background/minimized status bar update for simplified UX.
     }
 
     startTranscriptionTimer() {
@@ -1459,6 +1437,7 @@ class UIController {
         if (this.elements.createProjectForm) {
             this.elements.createProjectForm.reset();
         }
+        this.lastAutoProjectName = '';
         console.log('✅ Create form reset');
     }
 

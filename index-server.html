@@ -149,49 +149,45 @@
     </div>
 
     <!-- Transcription Progress Modal -->
-    <div id="transcription-progress-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-96 max-w-md">
-            <div class="text-center">
-                <!-- Modal Header -->
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
-                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                    </svg>
-                </div>
-                
-                <!-- Title -->
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Transcribing Audio</h3>
-                
-                <!-- Status Message -->
-                <p id="transcription-progress-message" class="text-sm text-gray-600 mb-4">Processing your audio file...</p>
-                
-                <!-- Progress Bar -->
-                <div class="w-full bg-gray-200 rounded-full h-2 mb-4">
-                    <div id="transcription-progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                
-                <!-- Time Information -->
-                <div class="flex justify-between text-sm text-gray-500 mb-4">
-                    <div>
-                        <span class="font-medium">Elapsed:</span>
-                        <span id="transcription-elapsed-time">00:00</span>
+    <div id="transcription-progress-modal" class="fixed inset-0 bg-gray-900 bg-opacity-45 backdrop-blur-sm flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100">
+                        <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
                     </div>
                     <div>
-                        <span class="font-medium">Remaining:</span>
-                        <span id="transcription-remaining-time">--:--</span>
+                        <h3 class="text-base font-semibold text-gray-900">Transcribing audio</h3>
+                        <p class="text-xs text-gray-500">Please keep this window open while processing completes.</p>
                     </div>
                 </div>
-                
-                <!-- File Info -->
-                <div id="transcription-file-info" class="text-xs text-gray-400 mb-4"></div>
-                
-                <!-- Action Buttons -->
-                <div class="flex space-x-3">
-                    <button id="minimize-transcription-modal" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
-                        Minimize
-                    </button>
-                    <button id="cancel-transcription-processing" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm">
-                        Cancel
+            </div>
+
+            <div class="px-6 py-5">
+                <p id="transcription-progress-message" class="text-sm text-gray-700 mb-4">Preparing transcription…</p>
+
+                <div class="w-full bg-gray-100 rounded-full h-2.5 mb-4">
+                    <div id="transcription-progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="rounded-md border border-gray-200 px-3 py-2 bg-white">
+                        <p class="text-xs text-gray-500">Elapsed</p>
+                        <p id="transcription-elapsed-time" class="text-sm font-medium text-gray-800">00:00</p>
+                    </div>
+                    <div class="rounded-md border border-gray-200 px-3 py-2 bg-white">
+                        <p class="text-xs text-gray-500">Estimated left</p>
+                        <p id="transcription-remaining-time" class="text-sm font-medium text-gray-800">--:--</p>
+                    </div>
+                </div>
+
+                <div id="transcription-file-info" class="text-xs text-gray-500 mb-5"></div>
+
+                <div class="flex justify-end">
+                    <button id="cancel-transcription-processing" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm font-medium">
+                        Cancel transcription
                     </button>
                 </div>
             </div>
@@ -468,30 +464,9 @@
 
                 <form id="create-project-form" class="space-y-4">
                     <div>
-                        <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
-                        <input type="text" id="project-name" name="projectName" required
-                               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-
-                    <div>
-                        <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assigned To</label>
-                        <select id="assigned-to" name="assignedTo"
-                               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="">Unassigned</option>
-                        </select>
-                    </div>
-
-                    <div>
                         <label for="project-audio-file" class="block text-sm font-medium text-gray-700">Audio File</label>
                         <input type="file" id="project-audio-file" name="audioFile" accept="audio/*" required
                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-
-                    <div>
-                        <label for="source-path" class="block text-sm font-medium text-gray-700">Source Path (optional)</label>
-                        <input type="text" id="source-path" name="sourcePath" placeholder="Local path or notes about source (optional)"
-                               class="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md shadow-sm text-sm text-gray-600" />
-                        <p class="text-xs text-gray-400">Optional: enter a local path or note about the original file (not required).</p>
                     </div>
 
                     <div class="flex items-center">
@@ -500,6 +475,21 @@
                         <label for="preview-mode" class="ml-2 text-sm text-gray-700">
                             Preview mode (first 60 seconds only)
                         </label>
+                    </div>
+
+                    <div>
+                        <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
+                        <input type="text" id="project-name" name="projectName" required
+                               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <p class="text-xs text-gray-500 mt-1">Auto-filled from the filename. You can edit it.</p>
+                    </div>
+
+                    <div>
+                        <label for="assigned-to" class="block text-sm font-medium text-gray-700">Assign Reviewer</label>
+                        <select id="assigned-to" name="assignedTo"
+                               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Unassigned</option>
+                        </select>
                     </div>
 
                     <div class="flex justify-end space-x-3 pt-4">
