@@ -21,6 +21,9 @@ class UIController {
             this.reviewAutosaveTimeout = null;
             this.validReviewers = [];
             this.lastAutoProjectName = '';
+            this.isApprovingFinal = false;
+            this.approvalSyncPollingInterval = null;
+            this.isApprovalSyncPollingTickRunning = false;
             
             // Transcription modal timer properties
             this.transcriptionTimer = null;
@@ -1508,12 +1511,93 @@ class UIController {
                     const projectRow = this.createProjectTableRow(project);
                     this.elements.projectsTableBody.appendChild(projectRow);
                 });
+
+                this.updateApprovalSyncPolling(projects);
             }
             // Ensure dynamic buttons have tooltips
             try { this.addTooltipsToDynamicButtons(); } catch (e) { console.warn('Tooltip add failed', e); }
         } catch (error) {
             console.error('❌ Error refreshing projects:', error);
             this.showErrorMessage('Failed to refresh projects');
+        }
+    }
+
+    isProjectApprovalSyncActive(project) {
+        if (!project || project.status !== CONFIG.PROJECT_STATUS.APPROVED) {
+            return false;
+        }
+
+        const metadataSyncStatus = project.metadataSyncStatus || project.metadata_sync_status || 'not_started';
+        const storageSyncStatus = project.storageSyncStatus || project.storage_sync_status || 'not_started';
+
+        if (metadataSyncStatus === 'failed' || storageSyncStatus === 'failed' || storageSyncStatus === 'stored') {
+            return false;
+        }
+
+        return (
+            metadataSyncStatus === 'pending'
+            || metadataSyncStatus === 'in_progress'
+            || metadataSyncStatus === 'extracted'
+            || storageSyncStatus === 'pending'
+            || storageSyncStatus === 'in_progress'
+        );
+    }
+
+    updateApprovalSyncPolling(projects) {
+        const hasActiveApprovalSync = (projects || []).some(project => this.isProjectApprovalSyncActive(project));
+        if (hasActiveApprovalSync) {
+            this.startApprovalSyncPolling();
+        } else {
+            this.stopApprovalSyncPolling();
+        }
+    }
+
+    startApprovalSyncPolling() {
+        if (this.approvalSyncPollingInterval) {
+            return;
+        }
+
+        this.approvalSyncPollingInterval = setInterval(async () => {
+            if (this.isApprovalSyncPollingTickRunning) {
+                return;
+            }
+
+            this.isApprovalSyncPollingTickRunning = true;
+            try {
+                if (this.useServerManager) {
+                    await this.projectManager.loadProjects();
+                }
+
+                const projects = this.projectManager.getAllProjects();
+                const hasActiveApprovalSync = projects.some(project => this.isProjectApprovalSyncActive(project));
+
+                if (this.currentProject?.id && this.currentView === 'review') {
+                    const refreshedCurrentProject = await this.projectManager.getProject(this.currentProject.id, true);
+                    if (refreshedCurrentProject) {
+                        this.currentProject = refreshedCurrentProject;
+                        this.showReviewView(refreshedCurrentProject);
+                    }
+                }
+
+                if (this.currentView === 'dashboard' || this.currentView === 'projects') {
+                    await this.refreshProjectsList();
+                }
+
+                if (!hasActiveApprovalSync) {
+                    this.stopApprovalSyncPolling();
+                }
+            } catch (error) {
+                console.warn('⚠️ Approval sync polling tick failed:', error);
+            } finally {
+                this.isApprovalSyncPollingTickRunning = false;
+            }
+        }, 3000);
+    }
+
+    stopApprovalSyncPolling() {
+        if (this.approvalSyncPollingInterval) {
+            clearInterval(this.approvalSyncPollingInterval);
+            this.approvalSyncPollingInterval = null;
         }
     }
 
@@ -1582,29 +1666,109 @@ class UIController {
         }
     }
 
+    getProjectStatusPresentation(project) {
+        const metadataSyncStatus = project.metadataSyncStatus || project.metadata_sync_status || 'not_started';
+        const storageSyncStatus = project.storageSyncStatus || project.storage_sync_status || 'not_started';
+
+        const baseBadgeClassMap = {
+            [CONFIG.PROJECT_STATUS.NEW]: 'bg-blue-100 text-blue-800',
+            [CONFIG.PROJECT_STATUS.PROCESSING]: 'bg-yellow-100 text-yellow-800',
+            [CONFIG.PROJECT_STATUS.COMPLETED]: 'bg-green-100 text-green-800',
+            [CONFIG.PROJECT_STATUS.NEEDS_REVIEW]: 'bg-orange-100 text-orange-800',
+            [CONFIG.PROJECT_STATUS.IN_REVIEW]: 'bg-blue-100 text-blue-800',
+            [CONFIG.PROJECT_STATUS.REVIEWED]: 'bg-yellow-100 text-yellow-800',
+            [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-purple-100 text-purple-800',
+            [CONFIG.PROJECT_STATUS.ERROR]: 'bg-red-100 text-red-800'
+        };
+
+        if (project.status !== CONFIG.PROJECT_STATUS.APPROVED) {
+            return {
+                statusLabel: project.status,
+                syncStageLabel: '',
+                badgeClass: baseBadgeClassMap[project.status] || 'bg-gray-100 text-gray-800'
+            };
+        }
+
+        if (metadataSyncStatus === 'failed') {
+            return {
+                statusLabel: 'Attention Needed',
+                syncStageLabel: 'Metadata generation failed',
+                badgeClass: 'bg-red-100 text-red-800',
+                shouldShowRetry: true
+            };
+        }
+
+        if (storageSyncStatus === 'failed') {
+            return {
+                statusLabel: 'Attention Needed',
+                syncStageLabel: 'Save failed',
+                badgeClass: 'bg-red-100 text-red-800',
+                shouldShowRetry: true
+            };
+        }
+
+        if (storageSyncStatus === 'stored') {
+            return {
+                statusLabel: 'Completed',
+                syncStageLabel: 'Saved successfully',
+                badgeClass: 'bg-green-100 text-green-800'
+            };
+        }
+
+        if (metadataSyncStatus === 'extracted' && storageSyncStatus === 'in_progress') {
+            return {
+                statusLabel: 'Approved',
+                syncStageLabel: 'Saving approved record…',
+                badgeClass: 'bg-purple-100 text-purple-800'
+            };
+        }
+
+        if (metadataSyncStatus === 'extracted' && (storageSyncStatus === 'pending' || storageSyncStatus === 'not_started')) {
+            return {
+                statusLabel: 'Approved',
+                syncStageLabel: 'Metadata generated · Save pending',
+                badgeClass: 'bg-purple-100 text-purple-800'
+            };
+        }
+
+        if (metadataSyncStatus === 'pending' || metadataSyncStatus === 'in_progress' || metadataSyncStatus === 'not_started') {
+            return {
+                statusLabel: 'Approved',
+                syncStageLabel: 'Generating metadata…',
+                badgeClass: 'bg-purple-100 text-purple-800'
+            };
+        }
+
+        return {
+            statusLabel: 'Approved',
+            syncStageLabel: '',
+            badgeClass: 'bg-purple-100 text-purple-800'
+        };
+    }
+
     // Create project card HTML
     createProjectCard(project) {
         const card = document.createElement('div');
         card.className = 'bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow';
         
-        const statusColor = {
-            [CONFIG.PROJECT_STATUS.NEW]: 'bg-blue-100 text-blue-800',
-            [CONFIG.PROJECT_STATUS.PROCESSING]: 'bg-yellow-100 text-yellow-800',
-            [CONFIG.PROJECT_STATUS.COMPLETED]: 'bg-green-100 text-green-800',
-            [CONFIG.PROJECT_STATUS.NEEDS_REVIEW]: 'bg-orange-100 text-orange-800',
-            [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-purple-100 text-purple-800',
-            [CONFIG.PROJECT_STATUS.ERROR]: 'bg-red-100 text-red-800'
-        };
-        
         const formattedDate = new Date(project.created).toLocaleDateString();
+        const statusPresentation = this.getProjectStatusPresentation(project);
+        const syncStageHtml = statusPresentation.syncStageLabel
+            ? `<div class="text-xs text-gray-600 mt-1">${UTILS.escapeHtml(statusPresentation.syncStageLabel)}</div>`
+            : '';
+        const retryButtonHtml = statusPresentation.shouldShowRetry
+            ? `<button onclick="event.stopPropagation(); uiController.retrySync('${project.id}')" class="ml-2 px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600" title="Retry sync operation">Retry</button>`
+            : '';
         
         card.innerHTML = `
             <div class="flex justify-between items-start mb-2">
                 <h3 class="text-lg font-semibold text-gray-900">${UTILS.escapeHtml(project.name)}</h3>
-                <span class="px-2 py-1 text-xs font-medium rounded-full ${statusColor[project.status] || 'bg-gray-100 text-gray-800'}">
-                    ${project.status}
+                <span class="px-2 py-1 text-xs font-medium rounded-full ${statusPresentation.badgeClass || 'bg-gray-100 text-gray-800'}">
+                    ${UTILS.escapeHtml(statusPresentation.statusLabel)}
                 </span>
             </div>
+            ${syncStageHtml}
+            ${retryButtonHtml}
             <div class="text-sm text-gray-600 mb-2">
                 <p><strong>Assigned to:</strong> ${UTILS.escapeHtml(project.assignedTo) || 'Unassigned'}</p>
                 <p><strong>Created:</strong> ${formattedDate}</p>
@@ -1640,13 +1804,8 @@ class UIController {
         row.className = 'hover:bg-gray-50 cursor-pointer';
         row.setAttribute('data-project-id', project.id);
         row.onclick = () => this.openProject(project.id);
-        
-        const statusColors = {
-            [CONFIG.PROJECT_STATUS.IN_REVIEW]: 'bg-blue-100 text-blue-800',
-            [CONFIG.PROJECT_STATUS.REVIEWED]: 'bg-yellow-100 text-yellow-800',
-            [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-green-100 text-green-800'
-        };
 
+        const statusPresentation = this.getProjectStatusPresentation(project);
         const formattedDate = new Date(project.created).toLocaleDateString();
         const assignedTo = project.assignedTo || project.assignedToName || 'Unassigned';
         
@@ -1681,6 +1840,13 @@ class UIController {
         // Check if this project is currently being processed
         const isCurrentlyProcessing = this.currentProcessId && this.currentProcessId.includes(project.id);
         
+        const syncStageHtml = statusPresentation.syncStageLabel
+            ? `<div class="text-xs text-gray-500 mt-1">${UTILS.escapeHtml(statusPresentation.syncStageLabel)}</div>`
+            : '';
+        const retryButtonHtml = statusPresentation.shouldShowRetry
+            ? `<button onclick="event.stopPropagation(); uiController.retrySync('${project.id}')" class="ml-2 px-2 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600" title="Retry sync operation">Retry</button>`
+            : '';
+
         row.innerHTML = `
             <td class="px-3 py-2 text-sm font-medium text-gray-900 project-name-cell" data-full-name="${UTILS.escapeHtml(project.name)}">
                 <div class="dashboard-compact-title">${UTILS.escapeHtml(project.name)}</div>
@@ -1688,7 +1854,9 @@ class UIController {
                 ${workflowInfo}
             </td>
             <td class="px-3 py-2 text-sm text-gray-500">
-                <span class="table-status-badge ${statusColors[project.status] || 'bg-gray-100 text-gray-800'}">${project.status}</span>
+                <span class="table-status-badge ${statusPresentation.badgeClass || 'bg-gray-100 text-gray-800'}">${UTILS.escapeHtml(statusPresentation.statusLabel)}</span>
+                ${syncStageHtml}
+                ${retryButtonHtml}
             </td>
             <td class="px-3 py-2 text-sm text-gray-600">
                 ${UTILS.escapeHtml(assignedTo)}
@@ -1749,27 +1917,17 @@ class UIController {
     showReviewView(project) {
         // Update project info
         if (this.elements.reviewProjectInfo) {
-            const statusColor = {
-                [CONFIG.PROJECT_STATUS.NEW]: 'bg-blue-100 text-blue-800',
-                [CONFIG.PROJECT_STATUS.PROCESSING]: 'bg-yellow-100 text-yellow-800',
-                [CONFIG.PROJECT_STATUS.COMPLETED]: 'bg-green-100 text-green-800',
-                [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-purple-100 text-purple-800',
-                [CONFIG.PROJECT_STATUS.ERROR]: 'bg-red-100 text-red-800'
-            };
-
-            const metadataSyncStatus = project.metadataSyncStatus || project.metadata_sync_status || 'not_started';
-            const storageSyncStatus = project.storageSyncStatus || project.storage_sync_status || 'not_started';
-            const storageSyncError = project.storageError || project.storage_error || '';
-            const syncInfoHtml = project.status === CONFIG.PROJECT_STATUS.APPROVED
-                ? `<div class="text-xs text-gray-600 mt-1">Metadata: <span class="font-medium">${UTILS.escapeHtml(metadataSyncStatus)}</span> • Storage: <span class="font-medium">${UTILS.escapeHtml(storageSyncStatus)}</span>${storageSyncError ? ` • Error: ${UTILS.escapeHtml(storageSyncError)}` : ''}</div>`
+            const statusPresentation = this.getProjectStatusPresentation(project);
+            const syncInfoHtml = statusPresentation.syncStageLabel
+                ? `<div class="text-xs text-gray-600 mt-1">${UTILS.escapeHtml(statusPresentation.syncStageLabel)}</div>`
                 : '';
             
             this.elements.reviewProjectInfo.innerHTML = `
                 <span class="font-semibold text-gray-900 text-base">${UTILS.escapeHtml(project.name)}</span>
                 <span class="text-gray-300 mx-2">|</span>
                 <span class="text-sm text-gray-600">${UTILS.escapeHtml(project.audioFileName || 'No audio')}</span>
-                <span class="px-2.5 py-1 text-xs font-medium rounded-md ${statusColor[project.status] || 'bg-gray-100 text-gray-800'}">
-                    ${project.status}
+                <span class="px-2.5 py-1 text-xs font-medium rounded-md ${statusPresentation.badgeClass || 'bg-gray-100 text-gray-800'}">
+                    ${UTILS.escapeHtml(statusPresentation.statusLabel)}
                 </span>
                 ${syncInfoHtml}
             `;
@@ -1778,6 +1936,8 @@ class UIController {
             if (headerEl) {
                 if (project.exportHeaderText) {
                     headerEl.textContent = project.exportHeaderText;
+
+            this.updateApprovalSyncPolling([project]);
                 } else {
                     headerEl.textContent = '';
                 }
@@ -2114,6 +2274,39 @@ class UIController {
         } catch (error) {
             console.error('❌ Error deleting project:', error);
             this.showErrorMessage(`Error deleting project: ${error.message}`);
+        }
+    }
+
+    // Retry sync operation for failed/stalled projects
+    async retrySync(projectId) {
+        try {
+            console.log(`🔄 Retrying sync for project ${projectId}`);
+            
+            const response = await fetch(`${CONFIG.API_BASE_URL}/projects/${projectId}/retry-sync`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `Server returned ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('✅ Sync retry initiated:', result);
+            
+            // Reload projects to show updated status
+            await this.refreshProjectsList();
+            
+            // Show success message
+            this.showSuccessMessage('Sync retry initiated. The project will be processed in the background.');
+            
+        } catch (error) {
+            console.error('❌ Error retrying sync:', error);
+            this.showErrorMessage(`Failed to retry sync: ${error.message}`);
         }
     }
 
@@ -3532,6 +3725,12 @@ class UIController {
 
     async approveFinal() {
         console.log('🎯 approveFinal() called');
+
+        if (this.isApprovingFinal) {
+            this.showNotification('Approval is already in progress…', 'info', 3000);
+            return;
+        }
+
         const currentUser = window.authManager?.currentUser;
         if (!currentUser) {
             this.showErrorMessage('User not authenticated');
@@ -3608,10 +3807,19 @@ class UIController {
         }
         
         console.log('✅ User confirmed approval, proceeding...');
-        
+
         // Re-apply Pali highlighting to the final text
         const formattedFinalText = this.highlightPaliTerms(finalText);
-        
+
+        this.isApprovingFinal = true;
+        const approveButton = this.elements.btnApproveFinal;
+        const originalApproveText = approveButton?.textContent || 'Approve Final';
+        if (approveButton) {
+            approveButton.disabled = true;
+            approveButton.classList.add('opacity-60', 'cursor-not-allowed');
+            approveButton.textContent = 'Approving...';
+        }
+
         try {
             // Update project to approved status
             await this.projectManager.updateProject(this.currentProject.id, {
@@ -3625,12 +3833,12 @@ class UIController {
                 approved_date: new Date().toISOString(),
                 lastEdited: new Date().toISOString()
             });
-            
+
             console.log('✅ Project updated successfully');
-            
+
             this.showSuccessMessage(`Project "${this.currentProject.name}" has been approved and finalized!`);
             console.log('✅ Project approved:', this.currentProject.name);
-            
+
             // Return to dashboard view
             // Refresh projects from server and update UI so the dashboard shows approved status immediately
             try {
@@ -3639,6 +3847,7 @@ class UIController {
                 // Refresh review/approved lists as well
                 this.refreshReviewProjectsList();
                 this.refreshApprovedProjectsList();
+                this.startApprovalSyncPolling();
             } catch (e) {
                 console.warn('Could not refresh projects after approval:', e);
             }
@@ -3650,6 +3859,13 @@ class UIController {
         } catch (error) {
             console.error('❌ Error approving project:', error);
             this.showErrorMessage('Failed to approve project: ' + error.message);
+        } finally {
+            this.isApprovingFinal = false;
+            if (approveButton) {
+                approveButton.disabled = false;
+                approveButton.classList.remove('opacity-60', 'cursor-not-allowed');
+                approveButton.textContent = originalApproveText;
+            }
         }
     }
     

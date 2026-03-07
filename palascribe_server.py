@@ -84,6 +84,9 @@ MCP_STORAGE_CREATED_BY = os.getenv('MCP_STORAGE_CREATED_BY', 'web-dashboard')
 # Increased timeout for MCP calls (metadata extraction can take 60-120s with LLM processing)
 AGENT_HTTP_TIMEOUT_SECONDS = int(os.getenv('AGENT_HTTP_TIMEOUT_SECONDS', '120'))
 
+# Overall timeout for entire sync operation (5 minutes = 300 seconds)
+SYNC_OPERATION_TIMEOUT_SECONDS = int(os.getenv('SYNC_OPERATION_TIMEOUT_SECONDS', '300'))
+
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
@@ -946,12 +949,17 @@ def sync_approved_project_to_pala(db_manager, project_id):
         text_preview = approved_text[:200] if approved_text else "(empty)"
         print(f"📄 Text preview: {text_preview}...")
         
+        # Set overall timeout for entire sync operation
+        sync_deadline = time.time() + SYNC_OPERATION_TIMEOUT_SECONDS
+        
         db_manager.update_project(project_id, {
             'metadata_sync_status': 'in_progress',
+            'metadata_sync_started_at': datetime.now().isoformat(),
             'storage_sync_status': 'pending',
             'storage_error': ''
         })
         print(f"🔄 Status updated: metadata=in_progress, storage=pending")
+        print(f"⏱️ Sync timeout: {SYNC_OPERATION_TIMEOUT_SECONDS}s (deadline: {datetime.fromtimestamp(sync_deadline).strftime('%H:%M:%S')})")
 
         print(f"\n📤 STEP 1: Extracting metadata via MCP...")
         
@@ -976,6 +984,10 @@ def sync_approved_project_to_pala(db_manager, project_id):
         print(f"📤 Full metadata request payload:")
         print(json.dumps(metadata_request_payload, indent=2, ensure_ascii=False))
         
+        # Check timeout before metadata extraction
+        if time.time() >= sync_deadline:
+            raise Exception(f"Sync operation timed out before metadata extraction (>{SYNC_OPERATION_TIMEOUT_SECONDS}s)")
+        
         metadata_payload = _extract_metadata_via_mcp(approved_text)
         print(f"✅ Metadata extracted successfully")
         print(f"   Agent: {MCP_METADATA_AGENT_ID}/{MCP_METADATA_TOOL_NAME}")
@@ -985,12 +997,17 @@ def sync_approved_project_to_pala(db_manager, project_id):
             'metadata_sync_status': 'extracted',
             'metadata_payload': json.dumps(metadata_payload, ensure_ascii=False),
             'metadata_synced_at': datetime.now().isoformat(),
-            'storage_sync_status': 'in_progress'
+            'storage_sync_status': 'in_progress',
+            'storage_sync_started_at': datetime.now().isoformat()
         })
         print(f"🔄 Status updated: metadata=extracted, storage=in_progress")
 
         sync_stage = 'storage'
         print(f"\n📤 STEP 2: Storing document via MCP...")
+        
+        # Check timeout before storage
+        if time.time() >= sync_deadline:
+            raise Exception(f"Sync operation timed out before storage (>{SYNC_OPERATION_TIMEOUT_SECONDS}s)")
         storage_result = _store_document_via_mcp(project, approved_text, metadata_payload)
         print(f"✅ Storage completed successfully")
         print(f"   Agent: {MCP_STORAGE_AGENT_ID}/{MCP_STORAGE_TOOL_NAME}")
@@ -1024,9 +1041,17 @@ def sync_approved_project_to_pala(db_manager, project_id):
         import traceback
         traceback.print_exc()
         
+        # Provide actionable error message based on error type
+        if 'timed out' in err.lower() or 'timeout' in err.lower():
+            error_msg = f"{err}. The MCP server may be overloaded or unresponsive. Please check the MCP server logs and try again."
+        elif 'connection' in err.lower():
+            error_msg = f"{err}. Could not connect to MCP server at {MCP_SERVER_WS_URL}. Please verify the server is running."
+        else:
+            error_msg = err
+        
         failed_updates = {
             'storage_sync_status': 'failed',
-            'storage_error': err
+            'storage_error': error_msg
         }
         if sync_stage == 'metadata':
             failed_updates['metadata_sync_status'] = 'failed'
@@ -1161,7 +1186,9 @@ class DatabaseManager:
                 metadata_sync_status TEXT DEFAULT 'not_started',
                 metadata_payload TEXT,
                 metadata_synced_at TEXT,
+                metadata_sync_started_at TEXT,
                 storage_sync_status TEXT DEFAULT 'not_started',
+                storage_sync_started_at TEXT,
                 storage_record_id TEXT,
                 storage_synced_at TEXT,
                 storage_error TEXT,
@@ -1302,6 +1329,13 @@ class DatabaseManager:
                     print("✅ Added 'metadata_synced_at' column to projects table")
                 except Exception as me:
                     print(f"⚠️ Could not add metadata_synced_at column: {me}")
+            
+            if 'metadata_sync_started_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_sync_started_at TEXT")
+                    print("✅ Added 'metadata_sync_started_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_sync_started_at column: {me}")
 
             if 'storage_sync_status' not in cols:
                 try:
@@ -1323,6 +1357,13 @@ class DatabaseManager:
                     print("✅ Added 'storage_synced_at' column to projects table")
                 except Exception as me:
                     print(f"⚠️ Could not add storage_synced_at column: {me}")
+            
+            if 'storage_sync_started_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_sync_started_at TEXT")
+                    print("✅ Added 'storage_sync_started_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_sync_started_at column: {me}")
 
             if 'storage_error' not in cols:
                 try:
@@ -1896,6 +1937,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/projects/') and self.path.endswith('/assign'):
             project_id = self.path.split('/')[-2]
             self.handle_assign_project(project_id)
+        elif self.path.startswith('/projects/') and self.path.endswith('/retry-sync'):
+            project_id = self.path.split('/')[-2]
+            self.handle_retry_sync(project_id)
         else:
             self.send_error(404, "Not Found")
     
@@ -1904,6 +1948,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         if self.path.startswith('/users/') and '/role' in self.path:
             user_id = self.path.split('/')[2]
             self.handle_update_user_role(user_id)
+        elif self.path == '/api/sync/check-stale':
+            self.handle_check_stale_sync()
         elif self.path.startswith('/projects/'):
             project_id = self.path.split('/')[-1]
             self.handle_update_project(project_id)
@@ -2455,6 +2501,113 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
         except Exception as e:
             print(f"❌ Error assigning project: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_retry_sync(self, project_id):
+        """Retry sync operation for a failed or stalled project"""
+        user = self.require_auth()
+        if not user:
+            return
+        
+        try:
+            project = self.db_manager.get_project(project_id)
+            if not project:
+                self.send_error_response(404, "Project not found")
+                return
+            
+            # Check if project is approved
+            if project.get('status') != 'Approved':
+                self.send_error_response(400, "Project must be approved before retrying sync")
+                return
+            
+            print(f"🔄 Manual retry sync requested for project {project_id}")
+            print(f"   Previous metadata_sync_status: {project.get('metadata_sync_status')}")
+            print(f"   Previous storage_sync_status: {project.get('storage_sync_status')}")
+            
+            # Reset sync statuses and clear errors
+            self.db_manager.update_project(project_id, {
+                'metadata_sync_status': 'pending',
+                'storage_sync_status': 'pending',
+                'storage_error': '',
+                'metadata_sync_started_at': None,
+                'storage_sync_started_at': None
+            })
+            
+            # Trigger sync in background thread
+            threading.Thread(
+                target=sync_approved_project_to_pala,
+                args=(self.db_manager, project_id),
+                daemon=True
+            ).start()
+            
+            self.send_json_response({
+                "message": "Sync retry initiated",
+                "projectId": project_id
+            })
+            
+        except Exception as e:
+            print(f"❌ Error retrying sync: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_check_stale_sync(self):
+        """Check for stale sync operations and reset them"""
+        user = self.require_auth('admin')
+        if not user:
+            return
+        
+        try:
+            # Get all projects with in_progress status that are stale (>5 minutes)
+            stale_threshold = datetime.now() - timedelta(seconds=SYNC_OPERATION_TIMEOUT_SECONDS)
+            stale_threshold_iso = stale_threshold.isoformat()
+            
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            
+            # Find stale metadata operations
+            cursor.execute("""
+                SELECT id, name, metadata_sync_started_at, storage_sync_started_at,
+                       metadata_sync_status, storage_sync_status
+                FROM projects
+                WHERE (metadata_sync_status = 'in_progress' AND metadata_sync_started_at < ?)
+                   OR (storage_sync_status = 'in_progress' AND storage_sync_started_at < ?)
+            """, (stale_threshold_iso, stale_threshold_iso))
+            
+            stale_projects = cursor.fetchall()
+            
+            reset_count = 0
+            for row in stale_projects:
+                project_id = row[0]
+                print(f"⚠️ Detected stale sync for project {project_id}")
+                print(f"   metadata_sync_status: {row[4]}, started: {row[2]}")
+                print(f"   storage_sync_status: {row[5]}, started: {row[3]}")
+                
+                # Reset to failed with timeout message
+                updates = {}
+                if row[4] == 'in_progress':  # metadata_sync_status
+                    updates['metadata_sync_status'] = 'failed'
+                    updates['storage_error'] = f"Operation timed out after {SYNC_OPERATION_TIMEOUT_SECONDS}s. The MCP server may be unresponsive. Please check server logs and try again."
+                
+                if row[5] == 'in_progress':  # storage_sync_status
+                    updates['storage_sync_status'] = 'failed'
+                    if 'storage_error' not in updates:
+                        updates['storage_error'] = f"Operation timed out after {SYNC_OPERATION_TIMEOUT_SECONDS}s. The MCP server may be unresponsive. Please check server logs and try again."
+                
+                if updates:
+                    self.db_manager.update_project(project_id, updates)
+                    reset_count += 1
+            
+            conn.close()
+            
+            self.send_json_response({
+                "staleProjectsFound": len(stale_projects),
+                "projectsReset": reset_count,
+                "thresholdSeconds": SYNC_OPERATION_TIMEOUT_SECONDS
+            })
+            
+        except Exception as e:
+            print(f"❌ Error checking stale sync operations: {e}")
+            import traceback
+            traceback.print_exc()
             self.send_error_response(500, str(e))
     
     def handle_create_project(self):
