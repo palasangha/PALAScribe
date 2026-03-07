@@ -56,6 +56,11 @@
             overflow: hidden !important;
             height: 100vh !important;
         }
+
+        @keyframes palascribeSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
     <!-- Header -->
     <header class="header-bar">
@@ -149,47 +154,41 @@
     </div>
 
     <!-- Transcription Progress Modal -->
-    <div id="transcription-progress-modal" class="fixed inset-0 bg-gray-900 bg-opacity-45 backdrop-blur-sm flex items-center justify-center z-50 hidden p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl border border-gray-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                <div class="flex items-center gap-3">
-                    <div class="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100">
-                        <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                        </svg>
+    <div id="transcription-progress-modal" class="hidden" style="position:fixed; inset:0; background:rgba(17,24,39,0.50); backdrop-filter: blur(3px); z-index:1000; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:#ffffff; width:100%; max-width:760px; border:2px solid #3b82f6; border-radius:14px; box-shadow:0 20px 45px rgba(2,6,23,0.25); overflow:hidden;">
+            <div style="padding:18px 20px 16px 20px; border-bottom:1px solid #dbeafe; background:linear-gradient(to right,#eff6ff,#ffffff);">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+                    <div style="min-width:0;">
+                        <h3 style="margin:0; font-size:34px; line-height:1.2; font-weight:700; color:#111827;">Transcribing audio…</h3>
+                        <p style="margin:8px 0 0 0; font-size:17px; color:#4b5563;">Please keep this window open while processing completes.</p>
+                        <div style="margin-top:12px; display:inline-flex; align-items:center; gap:8px; border:1px solid #bfdbfe; background:#eff6ff; border-radius:999px; padding:6px 12px;">
+                            <span style="display:inline-block; width:14px; height:14px; border-radius:999px; border:2px solid #2563eb; border-top-color:transparent; animation: palascribeSpin 1s linear infinite;"></span>
+                            <span style="font-size:13px; font-weight:600; color:#1d4ed8;">Processing in progress</span>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="text-base font-semibold text-gray-900">Transcribing audio</h3>
-                        <p class="text-xs text-gray-500">Please keep this window open while processing completes.</p>
-                    </div>
+                    <button id="cancel-transcription-processing" style="border:1px solid #fecaca; background:#fef2f2; color:#b91c1c; border-radius:8px; padding:8px 14px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">Cancel</button>
                 </div>
             </div>
 
-            <div class="px-6 py-5">
-                <p id="transcription-progress-message" class="text-sm text-gray-700 mb-4">Preparing transcription…</p>
+            <div style="padding:16px 20px 18px 20px;">
+                <p id="transcription-progress-message" style="margin:0 0 12px 0; font-size:14px; color:#374151;">Preparing transcription…</p>
 
-                <div class="w-full bg-gray-100 rounded-full h-2.5 mb-4">
-                    <div id="transcription-progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                <div style="width:100%; height:10px; border-radius:999px; background:#f3f4f6; margin-bottom:14px; overflow:hidden;">
+                    <div id="transcription-progress-bar" style="width:0%; height:100%; background:#2563eb; border-radius:999px; transition:width 300ms ease;"></div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="rounded-md border border-gray-200 px-3 py-2 bg-white">
-                        <p class="text-xs text-gray-500">Elapsed</p>
-                        <p id="transcription-elapsed-time" class="text-sm font-medium text-gray-800">00:00</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:10px;">
+                    <div style="border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; background:#ffffff;">
+                        <p style="margin:0; font-size:12px; color:#374151; font-weight:600; letter-spacing:0.01em;">Elapsed</p>
+                        <p id="transcription-elapsed-time" style="margin:6px 0 0 0; font-size:24px; font-weight:700; color:#111827;">00:00</p>
                     </div>
-                    <div class="rounded-md border border-gray-200 px-3 py-2 bg-white">
-                        <p class="text-xs text-gray-500">Estimated left</p>
-                        <p id="transcription-remaining-time" class="text-sm font-medium text-gray-800">--:--</p>
+                    <div style="border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; background:#ffffff;">
+                        <p style="margin:0; font-size:11px; color:#9ca3af;">Estimated range</p>
+                        <p id="transcription-remaining-time" style="margin:6px 0 0 0; font-size:16px; font-weight:600; color:#6b7280;">--:--</p>
                     </div>
                 </div>
 
-                <div id="transcription-file-info" class="text-xs text-gray-500 mb-5"></div>
-
-                <div class="flex justify-end">
-                    <button id="cancel-transcription-processing" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm font-medium">
-                        Cancel transcription
-                    </button>
-                </div>
+                <div id="transcription-file-info" style="font-size:12px; color:#6b7280;"></div>
             </div>
         </div>
     </div>
@@ -250,7 +249,7 @@
 
                 <!-- Projects Table -->
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 projects-table">
+                    <table class="project-table">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th scope="col" data-column="name" class="px-3 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
@@ -272,6 +271,142 @@
                         </tbody>
                     </table>
                 </div>
+                                <style>
+                                /* Table style */
+                                .project-table {
+                                    border-collapse: collapse;
+                                    width: 100%;
+                                    min-width: 900px;
+                                    table-layout: auto;
+                                }
+                                .project-table th, .project-table td {
+                                    border: 1px solid #e5e7eb;
+                                    padding: 10px 14px;
+                                    font-size: 15px;
+                                    text-align: left;
+                                    background: #fff;
+                                    font-weight: 400;
+                                }
+                                .project-table th {
+                                    background: #f8fafc;
+                                    font-weight: 600;
+                                }
+                                .project-table tr:hover {
+                                    background: #f6f8fa;
+                                }
+                                .project-table .project-name {
+                                    font-weight: 600;
+                                    font-size: 16px;
+                                }
+                                .project-table .project-date,
+                                .project-table .project-meta {
+                                    color: #888;
+                                    font-size: 13px;
+                                    font-weight: 400;
+                                }
+                                /* Status chip - match inspiration */
+                                .status-chip {
+                                    display: inline-block;
+                                    padding: 2px 14px;
+                                    border-radius: 16px;
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    border: 1.5px solid #f3eaea;
+                                    background: #f8f9fa;
+                                    color: #888;
+                                    letter-spacing: 0.01em;
+                                    transition: background 0.2s, color 0.2s, border 0.2s;
+                                }
+                                .status-chip.in_review {
+                                    background: #eaf4ff;
+                                    color: #2563eb;
+                                    border: 1.5px solid #b6d4fa;
+                                }
+                                .status-chip.completed {
+                                    background: #e6fbe8;
+                                    color: #1a7f37;
+                                    border: 1.5px solid #b6e4c7;
+                                }
+                                .status-chip.reviewed {
+                                    background: #f6f6ff;
+                                    color: #5b5fc7;
+                                    border: 1.5px solid #d1d3f3;
+                                }
+                                .status-chip.reviewed {
+                                    background: #f6f6ff;
+                                    color: #5b5fc7;
+                                    border: 1.5px solid #d1d3f3;
+                                }
+                                .status-chip.assigned {
+                                    background: #f6f6ff;
+                                    color: #5b5fc7;
+                                    border: 1.5px solid #d1d3f3;
+                                }
+                                .status-chip.approved {
+                                    background: #e6fbe8;
+                                    color: #1a7f37;
+                                    border: 1.5px solid #b6e4c7;
+                                }
+                                /* User avatar and name */
+                                .user-avatar {
+                                    display: inline-block;
+                                    width: 28px;
+                                    height: 28px;
+                                    border-radius: 50%;
+                                    background: #e0e7ef;
+                                    color: #5b5f6e;
+                                    font-weight: 600;
+                                    font-size: 15px;
+                                    text-align: center;
+                                    line-height: 28px;
+                                    margin-right: 8px;
+                                    vertical-align: middle;
+                                    border: 1.5px solid #e0e0e0;
+                                }
+                                .user-avatar.unassigned {
+                                    background: #f3f4f6;
+                                    color: #b0b3bb;
+                                    border: 1.5px solid #e0e0e0;
+                                }
+                                .user-name {
+                                    vertical-align: middle;
+                                    font-weight: 500;
+                                    color: #222;
+                                }
+                                /* Actions as buttons with text */
+                                .action-btn {
+                                    display: inline-flex;
+                                    align-items: center;
+                                    background: #f8fafc;
+                                    border: 1px solid #e5e7eb;
+                                    color: #2563eb;
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    padding: 4px 12px;
+                                    margin-right: 6px;
+                                    border-radius: 6px;
+                                    cursor: pointer;
+                                    transition: background 0.2s, color 0.2s, border 0.2s;
+                                    gap: 4px;
+                                      opacity: 0;
+                                      visibility: hidden;
+                                                  opacity: 1 !important;
+                                                  visibility: visible !important;
+                                }
+                                .action-btn:last-child {
+                                    margin-right: 0;
+                                }
+                                .action-btn:hover {
+                                    background: #e6f0fa;
+                                    color: #174ea6;
+                                    border: 1px solid #b6d4fa;
+                                }
+                                .overflow-x-auto {
+                                    width: 100%;
+                                    margin: 0;
+                                    max-width: none;
+                                }
+                                </style>
             </div>
         </div>
 
@@ -341,6 +476,11 @@
                         </div>
                         
                         <div class="flex items-center space-x-2">
+                            <div id="project-assignment-container" class="hidden">
+                                <select id="project-assignment-select" class="text-sm px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                    <option value="">Assign to...</option>
+                                </select>
+                            </div>
                             <button id="btn-show-source-info" class="text-xs text-gray-500 hover:text-gray-700 transition-colors" style="background:none;border:none;padding:4px 8px;cursor:pointer;">Source Info ▾</button>
                         </div>
                     </div>

@@ -1802,17 +1802,15 @@ class DatabaseManager:
         return True
     
     def assign_project_to_user(self, project_id, user_id):
-        """Assign a project to a reviewer"""
+        """Assign a project to a reviewer (without changing status)"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         now = datetime.now().isoformat()
-        
         cursor.execute('''
             UPDATE projects 
-            SET assigned_to_user_id = ?, assigned_date = ?, status = ?
+            SET assigned_to_user_id = ?, assigned_date = ?
             WHERE id = ?
-        ''', (user_id, now, 'Assigned', project_id))
-        
+        ''', (user_id, now, project_id))
         conn.commit()
         conn.close()
         print(f"✅ Assigned project {project_id} to user {user_id}")

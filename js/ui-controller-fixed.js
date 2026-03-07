@@ -29,6 +29,7 @@ class UIController {
             this.transcriptionTimer = null;
             this.transcriptionStartTime = null;
             this.transcriptionProgress = 0;
+            this.transcriptionEstimateRange = null;
             
             console.log('🔧 UIController properties initialized, calling init...');
             this.init();
@@ -144,6 +145,10 @@ class UIController {
             btnDownloadFinal: document.getElementById('btn-download-final'),
             btnExportPdf: document.getElementById('btn-export-pdf'),
             btnBackToDashboard: document.getElementById('btn-back-to-dashboard'),
+            projectAssignmentContainer: document.getElementById('project-assignment-container'),
+            projectAssignmentSelect: document.getElementById('project-assignment-select'),
+            projectAssignmentContainer: document.getElementById('project-assignment-container'),
+            projectAssignmentSelect: document.getElementById('project-assignment-select'),
 
             // Projects list
             projectsList: document.getElementById('projects-list'),
@@ -264,6 +269,16 @@ class UIController {
         }
         if (this.elements.btnBackToProjects) {
             this.elements.btnBackToProjects.addEventListener('click', () => this.showView('dashboard'));
+        }
+        
+        // Project assignment
+        if (this.elements.projectAssignmentSelect) {
+            this.elements.projectAssignmentSelect.addEventListener('change', async (e) => {
+                const reviewerId = e.target.value;
+                if (reviewerId && this.currentProject) {
+                    await this.assignProject(this.currentProject.id, reviewerId);
+                }
+            });
         }
 
         // Review/Edit functionality
@@ -715,9 +730,14 @@ class UIController {
             // Calculate file size and estimated time
             const fileSizeMB = audioFile.size / (1024 * 1024);
             const timeEstimate = this.getProcessingTimeEstimate(fileSizeMB, previewMode);
+            this.transcriptionEstimateRange = timeEstimate;
+
+            if (this.elements.transcriptionRemainingTime) {
+                this.elements.transcriptionRemainingTime.textContent = timeEstimate;
+            }
             
             const previewText = previewMode ? ' (Preview mode - processing first 60 seconds)' : '';
-            const sizeText = fileSizeMB > 10 ? ` (${fileSizeMB.toFixed(1)}MB - Est: ${timeEstimate})` : '';
+            const sizeText = fileSizeMB > 10 ? ` (${fileSizeMB.toFixed(1)}MB - Est range: ${timeEstimate})` : '';
             this.updateBackgroundProcessingMessage(`Transcribing audio${previewText}${sizeText}...`);
             
             console.log('📎 Attaching audio file to project...');
@@ -1104,6 +1124,7 @@ class UIController {
         // Initialize the modal
         this.transcriptionStartTime = Date.now();
         this.transcriptionProgress = 0;
+        this.transcriptionEstimateRange = null;
         
         // Reset modal content
         if (this.elements.transcriptionProgressMessage) {
@@ -1116,7 +1137,7 @@ class UIController {
             this.elements.transcriptionElapsedTime.textContent = '00:00';
         }
         if (this.elements.transcriptionRemainingTime) {
-            this.elements.transcriptionRemainingTime.textContent = '--:--';
+            this.elements.transcriptionRemainingTime.textContent = this.transcriptionEstimateRange || '--:--';
         }
         if (this.elements.transcriptionLiveLogs) {
             this.elements.transcriptionLiveLogs.textContent = 'Waiting for transcription logs...';
@@ -1125,6 +1146,7 @@ class UIController {
         // Show the modal
         if (this.elements.transcriptionProgressModal) {
             this.elements.transcriptionProgressModal.classList.remove('hidden');
+            this.elements.transcriptionProgressModal.style.display = 'flex';
         }
         
         // Start the timer update (which also starts polling)
@@ -1136,6 +1158,7 @@ class UIController {
         
         if (this.elements.transcriptionProgressModal) {
             this.elements.transcriptionProgressModal.classList.add('hidden');
+            this.elements.transcriptionProgressModal.style.display = 'none';
         }
         
         // Stop the timer
@@ -1160,6 +1183,7 @@ class UIController {
         // Show the modal
         if (this.elements.transcriptionProgressModal) {
             this.elements.transcriptionProgressModal.classList.remove('hidden');
+            this.elements.transcriptionProgressModal.style.display = 'flex';
         }
         
         // Resume the timer if not already running
@@ -1191,6 +1215,9 @@ class UIController {
     startTranscriptionTimer() {
         // Clear any existing timer
         this.stopTranscriptionTimer();
+
+        // Immediately update once so elapsed starts moving right away
+        this.updateTranscriptionTimer();
         
         this.transcriptionTimer = setInterval(() => {
             this.updateTranscriptionTimer();
@@ -1285,19 +1312,25 @@ class UIController {
             this.elements.transcriptionElapsedTime.textContent = elapsedTimeStr;
         }
         
-        // Calculate remaining time based on progress
-        let remainingTimeStr = '--:--';
+        const formatClock = (totalSeconds) => {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        };
+
+        // Calculate remaining time as a range
+        let remainingTimeStr = this.transcriptionEstimateRange || '--:--';
         if (this.transcriptionProgress > 5) { // Only estimate after some progress
             const estimatedTotalMs = (elapsedMs / this.transcriptionProgress) * 100;
             const remainingMs = estimatedTotalMs - elapsedMs;
             const remainingSeconds = Math.floor(remainingMs / 1000);
             
             if (remainingSeconds > 0) {
-                const remainingMinutes = Math.floor(remainingSeconds / 60);
-                const remainingSecondsRemainder = remainingSeconds % 60;
-                remainingTimeStr = `${remainingMinutes.toString().padStart(2, '0')}:${remainingSecondsRemainder.toString().padStart(2, '0')}`;
+                const lowEstimate = Math.max(0, Math.floor(remainingSeconds * 0.60));
+                const highEstimate = Math.ceil(remainingSeconds * 1.50);
+                remainingTimeStr = `${formatClock(lowEstimate)}–${formatClock(highEstimate)}`;
             } else {
-                remainingTimeStr = '00:00';
+                remainingTimeStr = '00:00–00:30';
             }
         }
         
@@ -1746,6 +1779,26 @@ class UIController {
         };
     }
 
+    getAssigneePresentation(project) {
+        const rawAssignedTo = (project.assignedTo || project.assignedToName || '').trim();
+        const isUnassigned = !rawAssignedTo || rawAssignedTo.toLowerCase() === 'unassigned';
+        let initials = '';
+        if (isUnassigned) {
+            initials = 'UA';
+        } else if (rawAssignedTo) {
+            const parts = rawAssignedTo.split(' ');
+            initials = parts.length > 1 ? (parts[0][0] + parts[1][0]) : parts[0][0];
+            initials = initials.toUpperCase();
+        }
+        return {
+            name: isUnassigned ? 'Unassigned' : rawAssignedTo,
+            isUnassigned,
+            initials,
+            chipClass: isUnassigned ? 'assignee-chip unassigned' : 'assignee-chip assigned',
+            avatarClass: isUnassigned ? 'user-avatar unassigned' : 'user-avatar'
+        };
+    }
+
     // Create project card HTML
     createProjectCard(project) {
         const card = document.createElement('div');
@@ -1756,6 +1809,8 @@ class UIController {
         const syncStageHtml = statusPresentation.syncStageLabel
             ? `<div class="text-xs text-gray-600 mt-1">${UTILS.escapeHtml(statusPresentation.syncStageLabel)}</div>`
             : '';
+        const assigneePresentation = this.getAssigneePresentation(project);
+        const assigneeHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${assigneePresentation.chipClass}">${UTILS.escapeHtml(assigneePresentation.name)}</span>`;
         const retryButtonHtml = statusPresentation.shouldShowRetry
             ? `<button onclick="event.stopPropagation(); uiController.retrySync('${project.id}')" class="ml-2 px-2 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600" title="Retry sync operation">Retry</button>`
             : '';
@@ -1770,7 +1825,7 @@ class UIController {
             ${syncStageHtml}
             ${retryButtonHtml}
             <div class="text-sm text-gray-600 mb-2">
-                <p><strong>Assigned to:</strong> ${UTILS.escapeHtml(project.assignedTo) || 'Unassigned'}</p>
+                <p><strong>Assigned to:</strong> ${assigneeHtml}</p>
                 <p><strong>Created:</strong> ${formattedDate}</p>
                 ${project.audioFileName ? `<p><strong>Audio:</strong> ${UTILS.escapeHtml(project.audioFileName)}</p>` : ''}
             </div>
@@ -1807,7 +1862,13 @@ class UIController {
 
         const statusPresentation = this.getProjectStatusPresentation(project);
         const formattedDate = new Date(project.created).toLocaleDateString();
-        const assignedTo = project.assignedTo || project.assignedToName || 'Unassigned';
+        const assigneePresentation = this.getAssigneePresentation(project);
+        let assigneeTableHtml = '';
+        if (assigneePresentation.isUnassigned) {
+            assigneeTableHtml = `<span class="${assigneePresentation.avatarClass}">${assigneePresentation.initials}</span><span class="user-name" style="color:#b0b3bb;">Unassigned</span>`;
+        } else {
+            assigneeTableHtml = `<span class="${assigneePresentation.avatarClass}">${assigneePresentation.initials}</span><span class="user-name">${UTILS.escapeHtml(assigneePresentation.name)}</span>`;
+        }
         
         // Debug logging for approved projects
         if (project.status === CONFIG.PROJECT_STATUS.APPROVED) {
@@ -1847,6 +1908,12 @@ class UIController {
             ? `<button onclick="event.stopPropagation(); uiController.retrySync('${project.id}')" class="ml-2 px-2 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600" title="Retry sync operation">Retry</button>`
             : '';
 
+        // Status chip color logic
+        let statusChipClass = 'status-chip';
+        const statusLabel = statusPresentation.statusLabel.toLowerCase();
+        if (statusLabel.includes('in_review')) statusChipClass += ' in_review';
+        else if (statusLabel.includes('completed')) statusChipClass += ' completed';
+        else if (statusLabel.includes('reviewed')) statusChipClass += ' reviewed';
         row.innerHTML = `
             <td class="px-3 py-2 text-sm font-medium text-gray-900 project-name-cell" data-full-name="${UTILS.escapeHtml(project.name)}">
                 <div class="dashboard-compact-title">${UTILS.escapeHtml(project.name)}</div>
@@ -1854,25 +1921,25 @@ class UIController {
                 ${workflowInfo}
             </td>
             <td class="px-3 py-2 text-sm text-gray-500">
-                <span class="table-status-badge ${statusPresentation.badgeClass || 'bg-gray-100 text-gray-800'}">${UTILS.escapeHtml(statusPresentation.statusLabel)}</span>
+                <span class="${statusChipClass}">${UTILS.escapeHtml(statusPresentation.statusLabel)}</span>
                 ${syncStageHtml}
                 ${retryButtonHtml}
             </td>
             <td class="px-3 py-2 text-sm text-gray-600">
-                ${UTILS.escapeHtml(assignedTo)}
+                ${assigneeTableHtml}
             </td>
             <td class="px-3 py-2 text-sm">
                 <div class="project-row-actions" onclick="event.stopPropagation();">
-                    <button class="project-action-btn btn-edit" onclick="uiController.openProject('${project.id}')" title="Edit">
-                        ✏️
+                    <button class="action-btn" onclick="uiController.openProject('${project.id}')" title="Edit">
+                        ✏️ Edit
                     </button>
                     ${project.transcription ? `
-                        <button class="project-action-btn btn-download" onclick="uiController.downloadTranscription('${project.id}')" title="Download">
-                            📥
+                        <button class="action-btn" onclick="uiController.downloadTranscription('${project.id}')" title="Download">
+                            📥 Download
                         </button>
                     ` : ''}
-                    <button class="project-action-btn btn-delete" onclick="uiController.deleteProject('${project.id}')" title="Delete">
-                        🗑️
+                    <button class="action-btn" onclick="uiController.deleteProject('${project.id}')" title="Delete">
+                        🗑️ Delete
                     </button>
                 </div>
             </td>
@@ -1914,7 +1981,7 @@ class UIController {
     }
 
     // Show review view with project data
-    showReviewView(project) {
+    async showReviewView(project) {
         // Update project info
         if (this.elements.reviewProjectInfo) {
             const statusPresentation = this.getProjectStatusPresentation(project);
@@ -1942,6 +2009,9 @@ class UIController {
                     headerEl.textContent = '';
                 }
             }
+            
+            // Setup project assignment dropdown for admins
+            await this.setupProjectAssignment(project);
 
             // Update the small audio filename display (bottom-right area)
             const filenameEl = document.getElementById('audio-file-name');
@@ -2281,11 +2351,13 @@ class UIController {
     async retrySync(projectId) {
         try {
             console.log(`🔄 Retrying sync for project ${projectId}`);
+            const apiBaseUrl = this.projectManager?.apiBaseUrl || window.location.origin;
+            const authToken = window.authManager?.authToken || localStorage.getItem('authToken') || '';
             
-            const response = await fetch(`${CONFIG.API_BASE_URL}/projects/${projectId}/retry-sync`, {
+            const response = await fetch(`${apiBaseUrl}/projects/${projectId}/retry-sync`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.authToken}`,
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json'
                 }
             });
@@ -3415,17 +3487,17 @@ class UIController {
     // Get processing time estimate
     getProcessingTimeEstimate(fileSizeMB, previewMode = false) {
         if (previewMode) {
-            return '~30 seconds';
+            return '00:15–01:00';
         }
         
         if (fileSizeMB < 5) {
-            return '1-2 minutes';
+            return '00:45–02:30';
         } else if (fileSizeMB < 20) {
-            return '3-5 minutes';
+            return '02:30–06:30';
         } else if (fileSizeMB < 50) {
-            return '5-10 minutes';
+            return '04:00–12:00';
         } else {
-            return '10+ minutes';
+            return '08:00–25:00';
         }
     }
 
@@ -4259,6 +4331,111 @@ ${transcriptionText.replace(/\n/g, '\\par ')}
         
         // Persist to server
         this.persistTranscriptSegments();
+    }
+
+    async setupProjectAssignment(project) {
+        const currentUser = window.authManager?.currentUser;
+        const apiBaseUrl = this.projectManager?.apiBaseUrl || window.location.origin;
+        const authToken = window.authManager?.authToken || localStorage.getItem('authToken') || '';
+        
+        // Only show assignment for admins
+        if (!currentUser || currentUser.role !== 'admin') {
+            if (this.elements.projectAssignmentContainer) {
+                this.elements.projectAssignmentContainer.classList.add('hidden');
+            }
+            return;
+        }
+
+        // Load reviewers if not already loaded
+        if (!this.validReviewers || this.validReviewers.length === 0) {
+            try {
+                const response = await fetch(`${apiBaseUrl}/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    this.validReviewers = (data.users || []).filter(u => u.role === 'reviewer');
+                }
+            } catch (error) {
+                console.warn('Could not load reviewers:', error);
+            }
+        }
+
+        if (!this.validReviewers || this.validReviewers.length === 0) {
+            if (this.elements.projectAssignmentContainer) {
+                this.elements.projectAssignmentContainer.classList.add('hidden');
+            }
+            return;
+        }
+
+        // Show and populate assignment dropdown
+        if (this.elements.projectAssignmentContainer && this.elements.projectAssignmentSelect) {
+            this.elements.projectAssignmentContainer.classList.remove('hidden');
+            
+            const currentAssignedId = project.assignedToUserId || project.assigned_to_user_id;
+            
+            this.elements.projectAssignmentSelect.innerHTML = `
+                <option value="">Assign to...</option>
+                ${this.validReviewers.map(r => 
+                    `<option value="${r.id}" ${currentAssignedId === r.id ? 'selected' : ''}>
+                        ${r.name || r.email}
+                    </option>`
+                ).join('')}
+            `;
+        }
+    }
+
+    async assignProject(projectId, reviewerId) {
+        try {
+            const apiBaseUrl = this.projectManager?.apiBaseUrl || window.location.origin;
+            const authToken = window.authManager?.authToken || localStorage.getItem('authToken') || '';
+            const response = await fetch(`${apiBaseUrl}/projects/${projectId}/assign`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId: reviewerId })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to assign project');
+            }
+
+            const result = await response.json();
+            const reviewerName = this.validReviewers.find(r => r.id === reviewerId)?.name || 'reviewer';
+            
+            this.showNotification(
+                `Project assigned to ${reviewerName}`,
+                'success',
+                3000
+            );
+            
+            // Update current project
+            if (this.currentProject) {
+                this.currentProject.assignedToUserId = reviewerId;
+                this.currentProject.assignedTo = reviewerName;
+            }
+            
+            // Refresh projects list
+            await this.refreshProjectsList();
+            
+        } catch (error) {
+            console.error('Error assigning project:', error);
+            this.showNotification(
+                `Failed to assign project: ${error.message}`,
+                'error',
+                5000
+            );
+            
+            // Reset dropdown to current value
+            if (this.currentProject && this.elements.projectAssignmentSelect) {
+                const currentAssignedId = this.currentProject.assignedToUserId || this.currentProject.assigned_to_user_id;
+                this.elements.projectAssignmentSelect.value = currentAssignedId || '';
+            }
+        }
     }
 }
 
