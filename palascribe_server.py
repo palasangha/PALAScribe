@@ -13,6 +13,7 @@ import tempfile
 import shutil
 import re
 import time
+import math
 import tempfile
 import sqlite3
 import uuid
@@ -21,8 +22,39 @@ from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.parse
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
+import secrets
+import hashlib
+
+try:
+    import websocket as websocket_client
+    MCP_WS_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ websocket-client not available: {e}")
+    MCP_WS_AVAILABLE = False
+
+# Load environment variables
+from pathlib import Path
+env_path = Path(__file__).parent / '.env'
+if env_path.exists():
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip()
+
+# Google OAuth
+try:
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+    from google_auth_oauthlib.flow import Flow
+    import jwt
+    GOOGLE_AUTH_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Google Auth not available: {e}")
+    GOOGLE_AUTH_AVAILABLE = False
 
 # PDF generation
 try:
@@ -34,9 +66,31 @@ try:
 except Exception:
     REPORTLAB_AVAILABLE = False
 
+# Configuration from environment
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/google/callback')
+SUPER_ADMIN_EMAIL = os.getenv('SUPER_ADMIN_EMAIL', '')
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32))
+MCP_SERVER_WS_URL = os.getenv('MCP_SERVER_WS_URL', 'ws://localhost:4000')
+MCP_METADATA_AGENT_ID = os.getenv('MCP_METADATA_AGENT_ID', 'metadata-extraction-agent')
+MCP_METADATA_TOOL_NAME = os.getenv('MCP_METADATA_TOOL_NAME', 'extract_metadata')
+MCP_METADATA_MODEL = os.getenv('MCP_METADATA_MODEL', 'ollama')
+MCP_METADATA_OUTPUT_TYPE = os.getenv('MCP_METADATA_OUTPUT_TYPE', 'pala')
+MCP_STORAGE_AGENT_ID = os.getenv('MCP_STORAGE_AGENT_ID', 'storage-agent')
+MCP_STORAGE_TOOL_NAME = os.getenv('MCP_STORAGE_TOOL_NAME', 'store_document')
+MCP_STORAGE_TYPE = os.getenv('MCP_STORAGE_TYPE', 'PalaScribe')
+MCP_STORAGE_CREATED_BY = os.getenv('MCP_STORAGE_CREATED_BY', 'web-dashboard')
+# Increased timeout for MCP calls (metadata extraction can take 60-120s with LLM processing)
+AGENT_HTTP_TIMEOUT_SECONDS = int(os.getenv('AGENT_HTTP_TIMEOUT_SECONDS', '120'))
+
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
 transcription_lock = threading.Lock()
+
+# Transcription status and logs tracking
+transcription_status = {}  # {project_id: {'start_time': timestamp, 'logs': [lines]}}
+MAX_LOG_LINES = 50  # Keep last 50 log lines per project
 
 # Pali corrections dictionary and function (moved from whisper_server.py)
 PALI_CORRECTIONS = {
@@ -287,6 +341,117 @@ def format_transcription_text(text):
     
     print(f"✅ Paragraph formatting applied: {len(sentences)} sentences → {paragraph_count} paragraphs")
     return formatted_text
+
+def parse_timecode_to_seconds(value):
+    """Convert SRT/VTT-style timecode (HH:MM:SS,mmm) to seconds."""
+    try:
+        if not value:
+            return None
+        clean = str(value).strip().replace(',', '.')
+        parts = clean.split(':')
+        if len(parts) != 3:
+            return None
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = float(parts[2])
+        return (hours * 3600) + (minutes * 60) + seconds
+    except Exception:
+        return None
+
+def parse_srt_segments(srt_content):
+    """Parse SRT content into timestamped transcript segments."""
+    segments = []
+    if not srt_content or not str(srt_content).strip():
+        return segments
+
+    blocks = re.split(r'\r?\n\r?\n+', srt_content.strip())
+    for idx, block in enumerate(blocks):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        time_line_index = 0
+        if '-->' not in lines[time_line_index] and len(lines) > 1 and '-->' in lines[1]:
+            time_line_index = 1
+
+        if '-->' not in lines[time_line_index]:
+            continue
+
+        try:
+            start_raw, end_raw = [part.strip() for part in lines[time_line_index].split('-->', 1)]
+        except Exception:
+            continue
+
+        start_seconds = parse_timecode_to_seconds(start_raw)
+        end_seconds = parse_timecode_to_seconds(end_raw)
+        text_lines = lines[time_line_index + 1:]
+        text = ' '.join(text_lines).strip()
+
+        if not text:
+            continue
+
+        segments.append({
+            'id': f'seg-{idx + 1}',
+            'start': start_seconds,
+            'end': end_seconds,
+            'text': text,
+            'speaker': ''
+        })
+
+    return segments
+
+
+def parse_whisper_json_segments(json_content):
+    """Parse Whisper JSON output into timestamped transcript segments with confidence metadata."""
+    segments = []
+    if not json_content or not str(json_content).strip():
+        return segments
+
+    try:
+        data = json.loads(json_content)
+    except Exception:
+        return segments
+
+    raw_segments = data.get('segments') if isinstance(data, dict) else None
+    if not isinstance(raw_segments, list):
+        return segments
+
+    for idx, segment in enumerate(raw_segments):
+        if not isinstance(segment, dict):
+            continue
+
+        text = str(segment.get('text') or '').strip()
+        if not text:
+            continue
+
+        avg_logprob = segment.get('avg_logprob')
+        no_speech_prob = segment.get('no_speech_prob')
+        confidence = segment.get('confidence')
+
+        if confidence is None and isinstance(avg_logprob, (int, float)):
+            try:
+                confidence = max(0.0, min(1.0, math.exp(float(avg_logprob))))
+            except Exception:
+                confidence = None
+        if confidence is None and isinstance(no_speech_prob, (int, float)):
+            try:
+                confidence = max(0.0, min(1.0, 1.0 - float(no_speech_prob)))
+            except Exception:
+                confidence = None
+
+        segments.append({
+            'id': str(segment.get('id') or f'seg-{idx + 1}'),
+            'start': segment.get('start'),
+            'end': segment.get('end'),
+            'text': text,
+            'speaker': str(segment.get('speaker') or ''),
+            'confidence': confidence,
+            'avg_logprob': avg_logprob,
+            'no_speech_prob': no_speech_prob,
+            'tokens': segment.get('tokens')
+        })
+
+    return segments
 
 
 def apply_pali_corrections(text):
@@ -562,6 +727,382 @@ def regenerate_pdf_for_project(db_manager, project_id, transcription_text, edito
         print(f"❌ Unexpected error regenerating PDF for project {project_id}: {e}")
         return False
 
+
+# Authentication helper functions
+def create_jwt_token(user_id, email, role):
+    """Create JWT token for authenticated user"""
+    payload = {
+        'user_id': user_id,
+        'email': email,
+        'role': role,
+        'exp': datetime.utcnow() + timedelta(days=7),  # Token expires in 7 days
+        'iat': datetime.utcnow()
+    }
+    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
+    return token
+
+
+def verify_jwt_token(token):
+    """Verify JWT token and return payload"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+
+def _select_approved_text(project):
+    """Select the best approved text content from project fields."""
+    return (
+        project.get('edited_text')
+        or project.get('editedText')
+        or project.get('transcription')
+        or ''
+    )
+
+
+def _extract_metadata_via_mcp(text):
+    """Invoke metadata extraction agent via MCP WebSocket JSON-RPC."""
+    if not MCP_WS_AVAILABLE:
+        raise Exception("websocket-client dependency is not available")
+
+    return _invoke_mcp_tool(
+        agent_id=MCP_METADATA_AGENT_ID,
+        tool_name=MCP_METADATA_TOOL_NAME,
+        arguments={
+            "text": text,
+            "model": MCP_METADATA_MODEL,
+            "output_type": "combined"
+        }
+    )
+
+
+def _invoke_mcp_tool(agent_id, tool_name, arguments):
+    """Invoke any MCP tool via WebSocket JSON-RPC and return `result`."""
+    if not MCP_WS_AVAILABLE:
+        raise Exception("websocket-client dependency is not available")
+
+    request_id = f"req-{uuid.uuid4()}"
+    request_payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/invoke",
+        "params": {
+            "agentId": agent_id,
+            "toolName": tool_name,
+            "arguments": arguments
+        },
+        "id": request_id
+    }
+
+    # Log request keys for debugging
+    arg_keys = list(arguments.keys()) if arguments else []
+    print(f"🔌 MCP Request: {agent_id}/{tool_name} with args: {arg_keys}")
+    print(f"📤 Full request payload:")
+    print(json.dumps(request_payload, indent=2, ensure_ascii=False))
+
+    ws = None
+    try:
+        ws = websocket_client.create_connection(MCP_SERVER_WS_URL, timeout=AGENT_HTTP_TIMEOUT_SECONDS)
+        ws.send(json.dumps(request_payload, ensure_ascii=False))
+
+        deadline = time.time() + AGENT_HTTP_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            raw_message = ws.recv()
+            if not raw_message:
+                continue
+
+            parsed = json.loads(raw_message)
+            if parsed.get('id') != request_id:
+                continue
+
+            if 'error' in parsed and parsed['error']:
+                raise Exception(f"MCP error: {parsed['error']}")
+
+            result = parsed.get('result')
+            if result is None:
+                raise Exception("MCP response did not contain result")
+            
+            # Check if result indicates failure (MCP agents return success: false with error message)
+            if isinstance(result, dict) and result.get('success') is False:
+                error_msg = result.get('error', 'Unknown error from MCP agent')
+                raise Exception(f"MCP agent failed: {error_msg}")
+            
+            return result
+
+        raise Exception("Timed out waiting for MCP metadata response")
+    finally:
+        try:
+            if ws:
+                ws.close()
+        except Exception:
+            pass
+
+
+def _store_document_via_mcp(project, approved_text, metadata_payload):
+    """Invoke storage-agent/store_document MCP tool with PALAScribe approval payload."""
+    source_name = (
+        project.get('audio_file_name')
+        or project.get('audioFileName')
+        or project.get('name')
+        or 'document.txt'
+    )
+    file_format = 'txt'
+    if '.' in source_name:
+        file_format = source_name.rsplit('.', 1)[-1].lower() or 'txt'
+
+    language = 'en'
+    try:
+        model_info_raw = project.get('processing_model') or project.get('processingModel') or '{}'
+        model_info = json.loads(model_info_raw) if isinstance(model_info_raw, str) else model_info_raw
+        if isinstance(model_info, dict) and model_info.get('language'):
+            language = str(model_info.get('language')).lower()
+    except Exception:
+        language = 'en'
+
+    storage_arguments = {
+        "type": "Transcription",
+        "original_file": source_name,
+        "file_format": file_format,
+        "processed_data": {
+            "text": approved_text
+        },
+        "metadata": {
+            "language": language,
+            "source": "PALAScribe",
+            **(metadata_payload if isinstance(metadata_payload, dict) else {})
+        },
+        "app_data": {
+            "app": "PalaScribe",
+            "project_name": project.get('name') or '',
+            "project_id": project.get('id') or '',
+            "status": project.get('status') or 'Approved',
+            "assigned_to": project.get('assigned_to') or project.get('assignedTo') or '',
+            "reviewed_by": project.get('reviewed_by_user_id') or '',
+            "approved_by": project.get('approved_by_user_id') or '',
+            "approved_date": project.get('approved_date') or project.get('approvedDate') or '',
+            "created_date": project.get('created') or '',
+            "audio_file": source_name
+        },
+        "created_by": "PalaScribe",
+        "tags": [
+            "palascribe",
+            "transcription",
+            language.lower() if language else "unknown",
+            project.get('name', '').lower().replace(' ', '-') if project.get('name') else 'project',
+            "approved"
+        ]
+    }
+
+    return _invoke_mcp_tool(
+        agent_id=MCP_STORAGE_AGENT_ID,
+        tool_name=MCP_STORAGE_TOOL_NAME,
+        arguments=storage_arguments
+    )
+
+
+def sync_approved_project_to_pala(db_manager, project_id):
+    """Background worker: extract metadata and store approved project in Pala platform."""
+    print(f"\n{'='*60}")
+    print(f"🔄 SYNC THREAD STARTED for project {project_id}")
+    print(f"   MCP WebSocket Available: {MCP_WS_AVAILABLE}")
+    print(f"   MCP Server URL: {MCP_SERVER_WS_URL}")
+    print(f"   Current thread: {threading.current_thread().name}")
+    print(f"{'='*60}\n")
+    
+    if not MCP_WS_AVAILABLE:
+        print(f"❌ SYNC ABORTED: websocket-client not available")
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'failed',
+            'storage_sync_status': 'failed',
+            'storage_error': 'websocket-client dependency is not available'
+        })
+        return
+
+    sync_stage = 'metadata'
+
+    try:
+        project = db_manager.get_project(project_id)
+        if not project:
+            print(f"❌ SYNC ABORTED: Project {project_id} not found in database")
+            return
+
+        print(f"📦 Project loaded: name='{project.get('name')}', has_transcription={bool(project.get('transcription'))}, has_editedText={bool(project.get('editedText'))}, has_edited_text={bool(project.get('edited_text'))}")
+        
+        approved_text = _select_approved_text(project)
+        if not approved_text or not str(approved_text).strip():
+            print(f"❌ SYNC ABORTED: No approved text found")
+            db_manager.update_project(project_id, {
+                'metadata_sync_status': 'failed',
+                'storage_sync_status': 'failed',
+                'storage_error': 'No approved text found for metadata extraction'
+            })
+            return
+
+        print(f"📝 Approved text length: {len(approved_text)} characters")
+        
+        # Log first 200 chars of text for debugging
+        text_preview = approved_text[:200] if approved_text else "(empty)"
+        print(f"📄 Text preview: {text_preview}...")
+        
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'in_progress',
+            'storage_sync_status': 'pending',
+            'storage_error': ''
+        })
+        print(f"🔄 Status updated: metadata=in_progress, storage=pending")
+
+        print(f"\n📤 STEP 1: Extracting metadata via MCP...")
+        
+        # Prepare metadata arguments
+        metadata_arguments = {
+            "text": approved_text,
+            "model": MCP_METADATA_MODEL,
+            "output_type": "combined"
+        }
+        
+        # Log the request
+        metadata_request_payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/invoke",
+            "params": {
+                "agentId": MCP_METADATA_AGENT_ID,
+                "toolName": MCP_METADATA_TOOL_NAME,
+                "arguments": metadata_arguments
+            }
+        }
+        print(f"🔌 MCP Request: {MCP_METADATA_AGENT_ID}/{MCP_METADATA_TOOL_NAME}")
+        print(f"📤 Full metadata request payload:")
+        print(json.dumps(metadata_request_payload, indent=2, ensure_ascii=False))
+        
+        metadata_payload = _extract_metadata_via_mcp(approved_text)
+        print(f"✅ Metadata extracted successfully")
+        print(f"   Agent: {MCP_METADATA_AGENT_ID}/{MCP_METADATA_TOOL_NAME}")
+        print(f"   Metadata keys: {list(metadata_payload.keys()) if metadata_payload else 'None'}")
+
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'extracted',
+            'metadata_payload': json.dumps(metadata_payload, ensure_ascii=False),
+            'metadata_synced_at': datetime.now().isoformat(),
+            'storage_sync_status': 'in_progress'
+        })
+        print(f"🔄 Status updated: metadata=extracted, storage=in_progress")
+
+        sync_stage = 'storage'
+        print(f"\n📤 STEP 2: Storing document via MCP...")
+        storage_result = _store_document_via_mcp(project, approved_text, metadata_payload)
+        print(f"✅ Storage completed successfully")
+        print(f"   Agent: {MCP_STORAGE_AGENT_ID}/{MCP_STORAGE_TOOL_NAME}")
+        print(f"   Storage result keys: {list(storage_result.keys()) if storage_result else 'None'}")
+
+        storage_record_id = (
+            storage_result.get('recordId')
+            or storage_result.get('id')
+            or storage_result.get('storageId')
+            or ''
+        )
+
+        db_manager.update_project(project_id, {
+            'storage_sync_status': 'stored',
+            'storage_record_id': str(storage_record_id),
+            'storage_synced_at': datetime.now().isoformat(),
+            'storage_error': ''
+        })
+        print(f"\n{'='*60}")
+        print(f"✅ SYNC COMPLETED for project {project_id}")
+        print(f"   Storage Record ID: {storage_record_id}")
+        print(f"{'='*60}\n")
+
+    except Exception as e:
+        err = str(e)
+        print(f"\n{'='*60}")
+        print(f"❌ SYNC FAILED for project {project_id}")
+        print(f"   Stage: {sync_stage}")
+        print(f"   Error: {err}")
+        print(f"{'='*60}\n")
+        import traceback
+        traceback.print_exc()
+        
+        failed_updates = {
+            'storage_sync_status': 'failed',
+            'storage_error': err
+        }
+        if sync_stage == 'metadata':
+            failed_updates['metadata_sync_status'] = 'failed'
+        db_manager.update_project(project_id, failed_updates)
+
+
+def verify_google_token(token):
+    """Verify Google ID token and return user info"""
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            token, 
+            google_requests.Request(), 
+            GOOGLE_CLIENT_ID
+        )
+        
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+        
+        return {
+            'google_id': idinfo['sub'],
+            'email': idinfo['email'],
+            'name': idinfo.get('name'),
+            'picture': idinfo.get('picture')
+        }
+    except ValueError:
+        return None
+
+
+# Transcription status and logging helper functions
+def add_transcription_log(project_id, message):
+    """Add a log message to a project's transcription logs"""
+    with transcription_lock:
+        if project_id not in transcription_status:
+            transcription_status[project_id] = {
+                'start_time': time.time(),
+                'logs': []
+            }
+        
+        # Add timestamp to log message
+        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
+        transcription_status[project_id]['logs'].append(log_entry)
+        
+        # Keep only last MAX_LOG_LINES
+        if len(transcription_status[project_id]['logs']) > MAX_LOG_LINES:
+            transcription_status[project_id]['logs'] = transcription_status[project_id]['logs'][-MAX_LOG_LINES:]
+
+
+def get_transcription_status(project_id):
+    """Get current status and logs for a transcription"""
+    with transcription_lock:
+        if project_id not in transcription_status:
+            return {
+                'running': False,
+                'elapsed_time': 0,
+                'logs': [],
+                'status': 'Not started'
+            }
+        
+        status_data = transcription_status[project_id]
+        elapsed = time.time() - status_data['start_time']
+        
+        return {
+            'running': project_id in active_transcriptions,
+            'elapsed_time': round(elapsed, 1),
+            'logs': status_data['logs'][-20:],  # Return last 20 logs
+            'status': 'Processing...' if project_id in active_transcriptions else 'Completed'
+        }
+
+
+def clear_transcription_status(project_id):
+    """Clear status for a project after transcription completes"""
+    with transcription_lock:
+        if project_id in transcription_status:
+            del transcription_status[project_id]
+
+
 class DatabaseManager:
     """Handles all database operations for projects and audio files"""
     
@@ -574,6 +1115,20 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # Users table for Google OAuth authentication
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                google_id TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                name TEXT,
+                profile_picture TEXT,
+                role TEXT DEFAULT 'reviewer',
+                created_at TEXT NOT NULL,
+                last_login TEXT
+            )
+        ''')
+        
         # Projects table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS projects (
@@ -582,7 +1137,7 @@ class DatabaseManager:
                 assigned_to TEXT,
                 start_date TEXT,
                 end_date TEXT,
-                status TEXT DEFAULT 'new',
+                status TEXT DEFAULT 'In Review',
                 audio_file_name TEXT,
                 audio_file_path TEXT,
                 transcription TEXT,
@@ -594,7 +1149,26 @@ class DatabaseManager:
                 is_preview BOOLEAN DEFAULT 0,
                 error_message TEXT,
                 created TEXT NOT NULL,
-                updated TEXT NOT NULL
+                updated TEXT NOT NULL,
+                created_by_user_id TEXT,
+                assigned_to_user_id TEXT,
+                reviewed_by_user_id TEXT,
+                assigned_date TEXT,
+                reviewed_date TEXT,
+                approved_by_user_id TEXT,
+                approved_date TEXT,
+                processing_model TEXT,
+                metadata_sync_status TEXT DEFAULT 'not_started',
+                metadata_payload TEXT,
+                metadata_synced_at TEXT,
+                storage_sync_status TEXT DEFAULT 'not_started',
+                storage_record_id TEXT,
+                storage_synced_at TEXT,
+                storage_error TEXT,
+                FOREIGN KEY (created_by_user_id) REFERENCES users (id),
+                FOREIGN KEY (assigned_to_user_id) REFERENCES users (id),
+                FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id),
+                FOREIGN KEY (approved_by_user_id) REFERENCES users (id)
             )
         ''')
         
@@ -644,6 +1218,118 @@ class DatabaseManager:
                     print("✅ Added 'export_provenance' column to projects table")
                 except Exception as me:
                     print(f"⚠️ Could not add export_provenance column: {me}")
+            if 'transcript_segments' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN transcript_segments TEXT")
+                    print("✅ Added 'transcript_segments' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add transcript_segments column: {me}")
+            
+            # Add user assignment columns for auth system
+            if 'created_by_user_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN created_by_user_id TEXT")
+                    print("✅ Added 'created_by_user_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add created_by_user_id column: {me}")
+            
+            if 'assigned_to_user_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN assigned_to_user_id TEXT")
+                    print("✅ Added 'assigned_to_user_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add assigned_to_user_id column: {me}")
+            
+            if 'reviewed_by_user_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN reviewed_by_user_id TEXT")
+                    print("✅ Added 'reviewed_by_user_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add reviewed_by_user_id column: {me}")
+            
+            if 'assigned_date' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN assigned_date TEXT")
+                    print("✅ Added 'assigned_date' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add assigned_date column: {me}")
+            
+            if 'reviewed_date' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN reviewed_date TEXT")
+                    print("✅ Added 'reviewed_date' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add reviewed_date column: {me}")
+            
+            if 'approved_by_user_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN approved_by_user_id TEXT")
+                    print("✅ Added 'approved_by_user_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add approved_by_user_id column: {me}")
+            
+            if 'approved_date' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN approved_date TEXT")
+                    print("✅ Added 'approved_date' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add approved_date column: {me}")
+            
+            if 'processing_model' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN processing_model TEXT")
+                    print("✅ Added 'processing_model' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add processing_model column: {me}")
+
+            if 'metadata_sync_status' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_sync_status TEXT DEFAULT 'not_started'")
+                    print("✅ Added 'metadata_sync_status' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_sync_status column: {me}")
+
+            if 'metadata_payload' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_payload TEXT")
+                    print("✅ Added 'metadata_payload' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_payload column: {me}")
+
+            if 'metadata_synced_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_synced_at TEXT")
+                    print("✅ Added 'metadata_synced_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_synced_at column: {me}")
+
+            if 'storage_sync_status' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_sync_status TEXT DEFAULT 'not_started'")
+                    print("✅ Added 'storage_sync_status' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_sync_status column: {me}")
+
+            if 'storage_record_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_record_id TEXT")
+                    print("✅ Added 'storage_record_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_record_id column: {me}")
+
+            if 'storage_synced_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_synced_at TEXT")
+                    print("✅ Added 'storage_synced_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_synced_at column: {me}")
+
+            if 'storage_error' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_error TEXT")
+                    print("✅ Added 'storage_error' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_error column: {me}")
 
             # Backfill export_provenance from existing exports/*/index.json if present
             try:
@@ -701,7 +1387,7 @@ class DatabaseManager:
             print(f"⚠️ Error fetching audio record for project {project_id}: {e}")
             return None
     
-    def create_project(self, name, assigned_to=""):
+    def create_project(self, name, assigned_to="", created_by_user_id=None):
         """Create a new project with unique name handling"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -713,9 +1399,9 @@ class DatabaseManager:
         now = datetime.now().isoformat()
         
         cursor.execute('''
-            INSERT INTO projects (id, name, assigned_to, start_date, status, created, updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (project_id, unique_name, assigned_to, now, 'new', now, now))
+            INSERT INTO projects (id, name, assigned_to, start_date, status, created, updated, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (project_id, unique_name, assigned_to, now, 'new', now, now, created_by_user_id))
         
         conn.commit()
         
@@ -743,6 +1429,7 @@ class DatabaseManager:
     def get_project(self, project_id):
         """Get project by ID"""
         conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # This allows us to access columns by name
         cursor = conn.cursor()
         
         cursor.execute('SELECT * FROM projects WHERE id = ?', (project_id,))
@@ -756,6 +1443,7 @@ class DatabaseManager:
     def get_all_projects(self):
         """Get all projects"""
         conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # This allows us to access columns by name
         cursor = conn.cursor()
         
         cursor.execute('SELECT * FROM projects ORDER BY created DESC')
@@ -776,9 +1464,16 @@ class DatabaseManager:
         for field, value in updates.items():
             if field in ['name', 'assigned_to', 'status', 'transcription', 'formatted_text', 
                         'edited_text', 'rich_content', 'word_count', 'processing_time', 
-                        'is_preview', 'error_message', 'audio_file_name', 'audio_file_path', 'export_provenance']:
+                        'is_preview', 'error_message', 'audio_file_name', 'audio_file_path', 'export_provenance',
+                        'transcript_segments', 'reviewed_by_user_id', 'reviewed_date', 'approved_by_user_id', 'approved_date',
+                        'processing_model', 'metadata_sync_status', 'metadata_payload', 'metadata_synced_at',
+                        'storage_sync_status', 'storage_record_id', 'storage_synced_at', 'storage_error']:
                 update_fields.append(f"{field} = ?")
-                values.append(value)
+                # Serialize transcript_segments to JSON if it's a list/dict
+                if field == 'transcript_segments' and isinstance(value, (list, dict)):
+                    values.append(json.dumps(value, ensure_ascii=False))
+                else:
+                    values.append(value)
         
         if update_fields:
             values.append(datetime.now().isoformat())  # updated timestamp
@@ -866,12 +1561,24 @@ class DatabaseManager:
     
     def _row_to_project(self, row):
         """Convert database row to project dictionary"""
-        columns = ['id', 'name', 'assigned_to', 'start_date', 'end_date', 'status',
-                  'audio_file_name', 'audio_file_path', 'transcription', 'formatted_text',
-                  'edited_text', 'rich_content', 'word_count', 'processing_time',
-                  'is_preview', 'error_message', 'created', 'updated']
+        # Convert sqlite3.Row to dict
+        project = dict(row)
         
-        project = dict(zip(columns, row))
+        # Fetch user names for user_id fields
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        for user_field in ['created_by_user_id', 'assigned_to_user_id', 'reviewed_by_user_id', 'approved_by_user_id']:
+            user_id = project.get(user_field)
+            if user_id:
+                cursor.execute('SELECT name FROM users WHERE id = ?', (user_id,))
+                user_row = cursor.fetchone()
+                if user_row:
+                    name_field = user_field.replace('_user_id', '_name')
+                    project[name_field] = user_row[0]
+                    print(f"✅ Found user name for {user_field}: {user_row[0]}")
+        
+        conn.close()
         
         # Convert snake_case field names to camelCase for client compatibility
         field_mapping = {
@@ -887,7 +1594,27 @@ class DatabaseManager:
             'processing_time': 'processingTime',
             'is_preview': 'isPreview',
             'error_message': 'errorMessage',
-            'export_provenance': 'exportProvenance'
+            'export_provenance': 'exportProvenance',
+            'transcript_segments': 'transcriptSegments',
+            'created_by_user_id': 'createdByUserId',
+            'created_by_name': 'createdByName',
+            'assigned_to_user_id': 'assignedToUserId',
+            'assigned_to_name': 'assignedToName',
+            'assigned_date': 'assignedDate',
+            'reviewed_by_user_id': 'reviewedByUserId',
+            'reviewed_by_name': 'reviewedByName',
+            'reviewed_date': 'reviewedDate',
+            'approved_by_user_id': 'approvedByUserId',
+            'approved_by_name': 'approvedByName',
+            'approved_date': 'approvedDate',
+            'processing_model': 'processingModel',
+            'metadata_sync_status': 'metadataSyncStatus',
+            'metadata_payload': 'metadataPayload',
+            'metadata_synced_at': 'metadataSyncedAt',
+            'storage_sync_status': 'storageSyncStatus',
+            'storage_record_id': 'storageRecordId',
+            'storage_synced_at': 'storageSyncedAt',
+            'storage_error': 'storageError'
         }
         
         # Create new project dict with camelCase field names
@@ -895,6 +1622,14 @@ class DatabaseManager:
         for key, value in project.items():
             new_key = field_mapping.get(key, key)
             converted_project[new_key] = value
+        
+        # Debug: log approved projects
+        if converted_project.get('status') == 'Approved':
+            print(f"🔍 Approved project: {converted_project.get('name')}")
+            print(f"   approvedByUserId: {converted_project.get('approvedByUserId')}")
+            print(f"   approvedByName: {converted_project.get('approvedByName')}")
+            print(f"   approvedDate: {converted_project.get('approvedDate')}")
+            print(f"   reviewedByName: {converted_project.get('reviewedByName')}")
         
         # Add audio URL if file exists
         print(f"🔍 _row_to_project: audioFilePath = {converted_project.get('audioFilePath')}")
@@ -914,6 +1649,134 @@ class DatabaseManager:
         print(f"📋 _row_to_project: Final project keys = {list(converted_project.keys())}")
         return converted_project
 
+    # User management methods
+    def create_or_update_user(self, google_id, email, name=None, profile_picture=None):
+        """Create a new user or update existing user from Google OAuth"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute('SELECT * FROM users WHERE google_id = ? OR email = ?', (google_id, email))
+        existing = cursor.fetchone()
+        
+        now = datetime.now().isoformat()
+        
+        if existing:
+            # Update existing user
+            user_id = existing[0]
+            cursor.execute('''
+                UPDATE users 
+                SET name = ?, profile_picture = ?, last_login = ?
+                WHERE id = ?
+            ''', (name, profile_picture, now, user_id))
+            print(f"✅ Updated existing user: {email}")
+        else:
+            # Create new user
+            user_id = str(uuid.uuid4())
+            # Check if this is the super admin
+            role = 'admin' if email == SUPER_ADMIN_EMAIL else 'reviewer'
+            cursor.execute('''
+                INSERT INTO users (id, google_id, email, name, profile_picture, role, created_at, last_login)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, google_id, email, name, profile_picture, role, now, now))
+            print(f"✅ Created new user: {email} with role: {role}")
+        
+        conn.commit()
+        
+        # Get the user
+        cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        cols = [d[0] for d in cursor.description]
+        user = dict(zip(cols, row))
+        
+        conn.close()
+        return user
+    
+    def get_user(self, user_id):
+        """Get user by ID"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return None
+        
+        cols = [d[0] for d in cursor.description]
+        user = dict(zip(cols, row))
+        conn.close()
+        return user
+    
+    def get_user_by_email(self, email):
+        """Get user by email"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            return None
+        
+        cols = [d[0] for d in cursor.description]
+        user = dict(zip(cols, row))
+        conn.close()
+        return user
+    
+    def get_all_users(self):
+        """Get all users"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users ORDER BY created_at DESC')
+        rows = cursor.fetchall()
+        
+        users = []
+        for row in rows:
+            cols = [d[0] for d in cursor.description]
+            users.append(dict(zip(cols, row)))
+        
+        conn.close()
+        return users
+    
+    def update_user_role(self, user_id, role):
+        """Update user role (admin or reviewer)"""
+        if role not in ['admin', 'reviewer']:
+            raise ValueError("Role must be 'admin' or 'reviewer'")
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Check if user is super admin (can't change their role)
+        cursor.execute('SELECT email FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        if row and row[0] == SUPER_ADMIN_EMAIL:
+            conn.close()
+            raise ValueError("Cannot change super admin role")
+        
+        cursor.execute('UPDATE users SET role = ? WHERE id = ?', (role, user_id))
+        conn.commit()
+        conn.close()
+        print(f"✅ Updated user {user_id} role to {role}")
+        return True
+    
+    def assign_project_to_user(self, project_id, user_id):
+        """Assign a project to a reviewer"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        cursor.execute('''
+            UPDATE projects 
+            SET assigned_to_user_id = ?, assigned_date = ?, status = ?
+            WHERE id = ?
+        ''', (user_id, now, 'Assigned', project_id))
+        
+        conn.commit()
+        conn.close()
+        print(f"✅ Assigned project {project_id} to user {user_id}")
+        return True
+
 class PALAScribeHandler(BaseHTTPRequestHandler):
     """HTTP request handler for PALAScribe API"""
     
@@ -932,17 +1795,30 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         """Handle GET requests"""
-        if self.path == '/health':
+        path_only = urllib.parse.urlparse(self.path).path
+        if path_only == '/health':
             self.handle_health_check()
-        elif self.path == '/api/dictionary':
+        elif path_only == '/auth/config':
+            self.handle_auth_config()
+        elif path_only == '/api/dictionary':
             self.handle_get_dictionary()
-        elif self.path == '/projects':
+        elif path_only == '/auth/me':
+            self.handle_get_current_user()
+        elif path_only == '/auth/logout':
+            self.handle_logout()
+        elif path_only == '/users':
+            self.handle_get_users()
+        elif path_only == '/projects':
             self.handle_get_projects()
-        elif self.path.startswith('/projects/'):
-            project_id = self.path.split('/')[-1]
+        elif '/projects/' in path_only and path_only.endswith('/status'):
+            # Handle transcription status endpoint
+            project_id = path_only.split('/')[2]
+            self.handle_get_transcription_status(project_id)
+        elif path_only.startswith('/projects/'):
+            project_id = path_only.split('/')[-1]
             self.handle_get_project(project_id)
-        elif self.path.startswith('/audio/'):
-            filename = self.path.split('/')[-1]
+        elif path_only.startswith('/audio/'):
+            filename = path_only.split('/')[-1]
             self.handle_get_audio(filename)
         else:
             # Handle static file serving
@@ -1002,7 +1878,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def do_POST(self):
         """Handle POST requests"""
-        if self.path == '/process':
+        if self.path == '/auth/google':
+            self.handle_google_auth()
+        elif self.path == '/process':
             self.handle_audio_processing()  # Original Whisper processing
         elif self.path == '/projects':
             self.handle_create_project()
@@ -1015,12 +1893,18 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         elif self.path.startswith('/projects/') and self.path.endswith('/cancel'):
             project_id = self.path.split('/')[-2]
             self.handle_cancel_transcription(project_id)
+        elif self.path.startswith('/projects/') and self.path.endswith('/assign'):
+            project_id = self.path.split('/')[-2]
+            self.handle_assign_project(project_id)
         else:
             self.send_error(404, "Not Found")
     
     def do_PUT(self):
         """Handle PUT requests"""
-        if self.path.startswith('/projects/'):
+        if self.path.startswith('/users/') and '/role' in self.path:
+            user_id = self.path.split('/')[2]
+            self.handle_update_user_role(user_id)
+        elif self.path.startswith('/projects/'):
             project_id = self.path.split('/')[-1]
             self.handle_update_project(project_id)
         else:
@@ -1098,6 +1982,146 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             "service": "PALAScribe Multi-User Server",
             "timestamp": time.time()
         })
+
+    def handle_auth_config(self):
+        """Return minimal auth config for frontend bootstrap"""
+        self.send_json_response({
+            "googleClientId": GOOGLE_CLIENT_ID,
+            "redirectUri": GOOGLE_REDIRECT_URI,
+            "configured": bool(GOOGLE_CLIENT_ID)
+        })
+    
+    # Authentication handlers
+    def get_current_user_from_token(self):
+        """Extract and verify user from Authorization header"""
+        auth_header = self.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return None
+        
+        token = auth_header.replace('Bearer ', '')
+        payload = verify_jwt_token(token)
+        if not payload:
+            return None
+        
+        user = self.db_manager.get_user(payload['user_id'])
+        return user
+    
+    def require_auth(self, required_role=None):
+        """Decorator to require authentication and optional role"""
+        user = self.get_current_user_from_token()
+        if not user:
+            self.send_error_response(401, "Unauthorized - Please log in")
+            return None
+        
+        if required_role and user['role'] != required_role and user['role'] != 'admin':
+            self.send_error_response(403, f"Forbidden - {required_role} role required")
+            return None
+        
+        return user
+    
+    def handle_google_auth(self):
+        """Handle Google OAuth token verification"""
+        try:
+            if not GOOGLE_AUTH_AVAILABLE:
+                self.send_error_response(500, "Google Auth not configured")
+                return
+            
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            google_token = data.get('token')
+            if not google_token:
+                self.send_error_response(400, "Token required")
+                return
+            
+            # Verify Google token
+            user_info = verify_google_token(google_token)
+            if not user_info:
+                self.send_error_response(401, "Invalid Google token")
+                return
+            
+            # Create or update user in database
+            user = self.db_manager.create_or_update_user(
+                google_id=user_info['google_id'],
+                email=user_info['email'],
+                name=user_info['name'],
+                profile_picture=user_info['picture']
+            )
+            
+            # Create JWT token
+            jwt_token = create_jwt_token(user['id'], user['email'], user['role'])
+            
+            self.send_json_response({
+                "token": jwt_token,
+                "user": {
+                    "id": user['id'],
+                    "email": user['email'],
+                    "name": user['name'],
+                    "role": user['role'],
+                    "profilePicture": user['profile_picture']
+                }
+            })
+            
+            print(f"✅ User logged in: {user['email']} ({user['role']})")
+            
+        except Exception as e:
+            print(f"❌ Error in Google auth: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_get_current_user(self):
+        """Get current logged-in user"""
+        user = self.get_current_user_from_token()
+        if not user:
+            self.send_error_response(401, "Not authenticated")
+            return
+        
+        self.send_json_response({
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "name": user['name'],
+                "role": user['role'],
+                "profilePicture": user['profile_picture']
+            }
+        })
+    
+    def handle_logout(self):
+        """Logout (client should discard token)"""
+        self.send_json_response({"message": "Logged out successfully"})
+    
+    def handle_get_users(self):
+        """Get all users (admin only)"""
+        user = self.require_auth('admin')
+        if not user:
+            return
+        
+        try:
+            users = self.db_manager.get_all_users()
+            users_list = [{
+                "id": u['id'],
+                "email": u['email'],
+                "name": u['name'],
+                "role": u['role'],
+                "profilePicture": u['profile_picture'],
+                "createdAt": u['created_at'],
+                "lastLogin": u['last_login'],
+                "isSuperAdmin": u['email'] == SUPER_ADMIN_EMAIL
+            } for u in users]
+            
+            self.send_json_response({"users": users_list})
+        except Exception as e:
+            print(f"❌ Error getting users: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_get_transcription_status(self, project_id):
+        """Get transcription status and debug logs for a project"""
+        try:
+            status = get_transcription_status(project_id)
+            self.send_json_response(status)
+        except Exception as e:
+            print(f"❌ Error getting transcription status: {e}")
+            self.send_error_response(500, str(e))
     
     def handle_get_projects(self):
         """Get all projects"""
@@ -1288,7 +2312,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Error getting project {project_id}: {e}")
             self.send_error_response(500, str(e))
-    
+
     def handle_get_dictionary(self):
         """Get current dictionary mappings"""
         try:
@@ -1330,8 +2354,80 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"❌ Error deleting dictionary word '{english_word}': {e}")
             self.send_error_response(500, str(e))
     
+    def handle_update_user_role(self, user_id):
+        """Update user role (admin only)"""
+        admin = self.require_auth('admin')
+        if not admin:
+            return
+        
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            new_role = data.get('role')
+            if not new_role or new_role not in ['admin', 'reviewer']:
+                self.send_error_response(400, "Invalid role")
+                return
+            
+            self.db_manager.update_user_role(user_id, new_role)
+            
+            self.send_json_response({
+                "message": f"User role updated to {new_role}",
+                "userId": user_id,
+                "role": new_role
+            })
+            
+        except ValueError as e:
+            self.send_error_response(400, str(e))
+        except Exception as e:
+            print(f"❌ Error updating user role: {e}")
+            self.send_error_response(500, str(e))
+    
+    def handle_assign_project(self, project_id):
+        """Assign project to a reviewer (admin only)"""
+        admin = self.require_auth('admin')
+        if not admin:
+            return
+        
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            user_id = data.get('userId')
+            if not user_id:
+                self.send_error_response(400, "User ID required")
+                return
+            
+            # Verify user exists
+            user = self.db_manager.get_user(user_id)
+            if not user:
+                self.send_error_response(404, "User not found")
+                return
+            
+            self.db_manager.assign_project_to_user(project_id, user_id)
+            
+            self.send_json_response({
+                "message": f"Project assigned to {user['name'] or user['email']}",
+                "projectId": project_id,
+                "assignedTo": {
+                    "id": user['id'],
+                    "name": user['name'],
+                    "email": user['email']
+                }
+            })
+            
+        except Exception as e:
+            print(f"❌ Error assigning project: {e}")
+            self.send_error_response(500, str(e))
+    
     def handle_create_project(self):
         """Create new project"""
+        # For now, make auth optional to not break existing flow
+        # In production, you'd require auth here
+        user = self.get_current_user_from_token()
+        
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -1339,12 +2435,21 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             name = data.get('name', '').strip()
             assigned_to = data.get('assignedTo', '').strip()
+            assigned_to_user_id = data.get('assignedToUserId')
             
             if not name:
                 self.send_error_response(400, "Project name is required")
                 return
             
-            project = self.db_manager.create_project(name, assigned_to)
+            # Pass user_id if authenticated
+            user_id = user['id'] if user else None
+            project = self.db_manager.create_project(name, assigned_to, created_by_user_id=user_id)
+
+            if assigned_to_user_id:
+                reviewer = self.db_manager.get_user(assigned_to_user_id)
+                if reviewer and reviewer.get('role') == 'reviewer':
+                    self.db_manager.assign_project_to_user(project['id'], assigned_to_user_id)
+                    project = self.db_manager.get_project(project['id'])
             # Also create a simple exports header so the UI can show project
             # header information immediately (no transcription needed).
             try:
@@ -1412,6 +2517,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     def handle_update_project(self, project_id):
         """Update existing project"""
         try:
+            existing_project = self.db_manager.get_project(project_id)
+            previous_status = existing_project.get('status') if existing_project else None
+            print(f"📋 BEFORE UPDATE: project_id={project_id}, previous_status={previous_status}")
+
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
@@ -1429,7 +2538,16 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 'wordCount': 'word_count',
                 'processingTime': 'processing_time',
                 'isPreview': 'is_preview',
-                'errorMessage': 'error_message'
+                'errorMessage': 'error_message',
+                'transcriptSegments': 'transcript_segments',
+                'exportProvenance': 'export_provenance',
+                'metadataSyncStatus': 'metadata_sync_status',
+                'metadataPayload': 'metadata_payload',
+                'metadataSyncedAt': 'metadata_synced_at',
+                'storageSyncStatus': 'storage_sync_status',
+                'storageRecordId': 'storage_record_id',
+                'storageSyncedAt': 'storage_synced_at',
+                'storageError': 'storage_error'
             }
             
             # Convert field names
@@ -1440,6 +2558,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 converted_data[db_key] = value
             
             print(f"🔄 Updating project {project_id} with fields: {list(converted_data.keys())}")
+            print(f"📊 Converted data status: {converted_data.get('status')}")
             
             self.db_manager.update_project(project_id, converted_data)
             
@@ -1447,6 +2566,43 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             project = self.db_manager.get_project(project_id)
             if project:
                 self.send_json_response(project)
+
+                try:
+                    current_status = converted_data.get('status')
+                    print(f"🔍 Status check: previous='{previous_status}' -> current='{current_status}'")
+                    
+                    # Trigger sync if:
+                    # 1. Status transitioned TO Approved (new approval)
+                    # 2. Status IS Approved AND was explicitly sent in this update (re-approval or explicit approval)
+                    transitioned_to_approved = (
+                        current_status == 'Approved'
+                        and previous_status != 'Approved'
+                    )
+                    explicitly_set_to_approved = (
+                        current_status == 'Approved'
+                        and 'status' in data  # Only if status was in the request
+                    )
+                    should_sync = transitioned_to_approved or explicitly_set_to_approved
+                    
+                    print(f"🔍 Transition to approved: {transitioned_to_approved}")
+                    print(f"🔍 Explicitly set to Approved: {explicitly_set_to_approved}")
+                    print(f"🔍 Should sync: {should_sync}")
+                    
+                    if should_sync:
+                        print(f"🚀 Triggering metadata/storage sync for approved project {project_id}")
+                        self.db_manager.update_project(project_id, {
+                            'metadata_sync_status': 'pending',
+                            'storage_sync_status': 'pending',
+                            'storage_error': ''
+                        })
+                        threading.Thread(
+                            target=sync_approved_project_to_pala,
+                            args=(self.db_manager, project_id),
+                            daemon=True
+                        ).start()
+                except Exception as e:
+                    print(f"⚠️ Could not trigger metadata/storage sync for project {project_id}: {e}")
+
                 # Trigger PDF regeneration when transcription or edited text changes,
                 # or when status transitions to 'ready'. Run in background.
                 try:
@@ -1577,9 +2733,9 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"✅ Audio file saved to: {file_path}")
             
             # Update project status
-            print(f"📝 Updating project {project_id} status to 'processing'")
+            print(f"📝 Updating project {project_id} status to 'In Review' (transcribing)")
             self.db_manager.update_project(project_id, {
-                'status': 'processing'
+                'status': 'In Review'
             })
             
             print(f"📤 Sending success response for audio upload")
@@ -1645,11 +2801,17 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"🎙️ Starting transcription for project {project_id}")
             print(f"🔧 Model: {model}, Language: {language}, Preview: {preview_mode}")
             
+            # Initialize transcription status and logging
+            add_transcription_log(project_id, f"🎙️ Starting transcription")
+            add_transcription_log(project_id, f"🔧 Model: {model}, Language: {language}, Preview: {preview_mode}")
+            
             # Update project status
-            self.db_manager.update_project(project_id, {'status': 'processing'})
+            self.db_manager.update_project(project_id, {'status': 'In Review'})
             
             # Process the audio file
             print(f"🎵 Using audio file path: {audio_file_path}")
+            add_transcription_log(project_id, f"🎵 Using audio file: {audio_file_path}")
+            
             result = self.execute_whisper_command(
                 audio_file_path,
                 model=model,
@@ -1666,27 +2828,37 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 with transcription_lock:
                     if project_id in active_transcriptions and active_transcriptions[project_id].get('cancelled'):
                         print(f"🛑 Transcription was cancelled for project {project_id}, skipping result update")
+                        add_transcription_log(project_id, f"🛑 Processing cancelled")
                         self.send_json_response({'success': False, 'error': 'Processing was cancelled'})
                         return
                 
                 self.db_manager.update_project(project_id, {
                     'transcription': result.get('transcription', ''),
                     'formatted_text': result.get('formatted_text', ''),
+                    'transcript_segments': json.dumps(result.get('segments', []), ensure_ascii=False),
                     'word_count': result.get('word_count', 0),
                     'processing_time': result.get('processing_time', 0),
+                    'processing_model': json.dumps({
+                        'provider': 'OpenAI Whisper',
+                        'model': model,
+                        'language': language
+                    }),
                     'status': 'Needs_Review'  # Set to ready for review status
                 })
                 print(f"✅ Transcription completed for project {project_id}")
+                add_transcription_log(project_id, f"✅ Transcription completed ({result.get('word_count', 0)} words, {result.get('processing_time', 0):.1f}s)")
             else:
                 # For failed transcriptions, also check if it was cancelled
                 if result.get('error') == 'Processing was cancelled':
                     print(f"🛑 Transcription was cancelled for project {project_id}")
+                    add_transcription_log(project_id, f"🛑 Transcription cancelled")
                 else:
                     self.db_manager.update_project(project_id, {
-                        'status': 'Error',  # Use consistent error status
+                        'status': 'In Review',  # Reset to In Review on error
                         'error_message': result.get('error', 'Unknown error')
                     })
                     print(f"❌ Transcription failed for project {project_id}")
+                    add_transcription_log(project_id, f"❌ Error: {result.get('error', 'Unknown error')}")
             
             self.send_json_response(result)
             
@@ -1723,7 +2895,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     
                     # Update project status in database
                     self.db_manager.update_project(project_id, {
-                        'status': 'new',
+                        'status': 'In Review',
                         'updated_at': datetime.now().isoformat()
                     })
                     
@@ -1738,7 +2910,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             self.send_error_response(500, str(e))
     
     def handle_get_audio(self, filename):
-        """Serve audio files"""
+        """Serve audio files with range request support for seeking"""
         try:
             file_path = Path("uploads") / filename
             if not file_path.exists():
@@ -1754,39 +2926,85 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 '.ogg': 'audio/ogg'
             }
             content_type = content_types.get(extension, 'audio/mpeg')
-
-            # Send file
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Content-Length', str(file_path.stat().st_size))
-            self.end_headers()
-
-            with open(file_path, 'rb') as f:
+            
+            file_size = file_path.stat().st_size
+            
+            # Check for Range header (required for seeking in audio/video)
+            range_header = self.headers.get('Range')
+            
+            if range_header:
+                # Parse range header (e.g., "bytes=1000-2000" or "bytes=1000-")
                 try:
-                    shutil.copyfileobj(f, self.wfile)
-                except (BrokenPipeError, ConnectionResetError) as conn_err:
-                    # Client disconnected while streaming audio; log and stop quietly.
-                    print(f"⚠️ Client disconnected during audio streaming: {conn_err}")
-                    return
-                except OSError as oe:
-                    # Treat EPIPE (broken pipe) as client disconnect on some platforms
-                    if getattr(oe, 'errno', None) in (32,):
-                        print(f"⚠️ Socket error during streaming (treated as client disconnect): {oe}")
+                    byte_range = range_header.replace('bytes=', '').split('-')
+                    start = int(byte_range[0]) if byte_range[0] else 0
+                    end = int(byte_range[1]) if byte_range[1] else file_size - 1
+                    
+                    # Validate range
+                    if start >= file_size or start < 0 or end >= file_size:
+                        self.send_error(416, "Requested Range Not Satisfiable")
                         return
-                    raise
+                    
+                    content_length = end - start + 1
+                    
+                    # Send 206 Partial Content response
+                    self.send_response(206)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+                    self.send_header('Content-Length', str(content_length))
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    
+                    # Send the requested byte range
+                    with open(file_path, 'rb') as f:
+                        f.seek(start)
+                        bytes_to_send = content_length
+                        chunk_size = 8192
+                        
+                        while bytes_to_send > 0:
+                            chunk = f.read(min(chunk_size, bytes_to_send))
+                            if not chunk:
+                                break
+                            try:
+                                self.wfile.write(chunk)
+                                bytes_to_send -= len(chunk)
+                            except (BrokenPipeError, ConnectionResetError):
+                                print(f"⚠️ Client disconnected during range streaming")
+                                return
+                    
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Invalid range header: {range_header} - {e}")
+                    self.send_error(400, "Bad Range Header")
+                    return
+            else:
+                # No range request - send entire file
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Content-Length', str(file_size))
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+
+                with open(file_path, 'rb') as f:
+                    try:
+                        shutil.copyfileobj(f, self.wfile)
+                    except (BrokenPipeError, ConnectionResetError) as conn_err:
+                        print(f"⚠️ Client disconnected during audio streaming: {conn_err}")
+                        return
+                    except OSError as oe:
+                        if getattr(oe, 'errno', None) in (32,):
+                            print(f"⚠️ Socket error during streaming: {oe}")
+                            return
+                        raise
 
         except Exception as e:
-            # If the client disconnected (BrokenPipe/ConnectionReset), don't try to
-            # write an error response which will also fail with BrokenPipe.
             if isinstance(e, (BrokenPipeError, ConnectionResetError)):
                 print(f"⚠️ Client disconnected before error handling: {e}")
                 return
-            # Other exceptions should return a 500 to the client if possible
             try:
                 self.send_error(500, str(e))
             except Exception:
-                # If sending the error also fails (e.g., broken pipe), just log it.
+                pass
                 print(f"❌ Failed to send error response after exception: {e}")
     
     def handle_audio_processing(self):
@@ -1937,24 +3155,35 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
         processed_audio_path = audio_file_path
         if preview_mode:
             print(f"🔍 Preview mode enabled - processing only first {preview_duration} seconds")
+            if project_id:
+                add_transcription_log(project_id, f"🔍 Preview mode: {preview_duration}s")
             processed_audio_path = self.trim_audio_file(audio_file_path, preview_duration)
             if processed_audio_path:
                 # Update file size for the trimmed version
                 file_size = os.path.getsize(processed_audio_path)
                 file_size_mb = file_size / (1024 * 1024)
                 print(f"✅ Audio trimmed to {file_size_mb:.1f}MB")
+                if project_id:
+                    add_transcription_log(project_id, f"✅ Audio trimmed to {file_size_mb:.1f}MB")
             else:
                 print("⚠️ Warning: Audio trimming failed, processing full file")
+                if project_id:
+                    add_transcription_log(project_id, f"⚠️ Trimming failed, using full file")
                 processed_audio_path = audio_file_path
         
-        # Estimate processing time
-        estimated_minutes = max(1, int(file_size_mb * 1.5))
-        if preview_mode:
-            estimated_minutes = max(1, int(estimated_minutes * 0.2))
+        # Normalize language for Whisper CLI (accepts names, but short codes are safer)
+        language_map = {
+            "english": "en",
+            "hindi": "hi",
+            "sinhala": "si",
+            "tamil": "ta",
+            "pali": "pi",
+        }
+        language_cli = language_map.get(str(language or "").strip().lower(), language)
         
         mode_text = f" (Preview: {preview_duration}s)" if preview_mode else ""
         print(f"🎙️ Processing audio file: {os.path.basename(audio_file_path)} ({file_size_mb:.1f}MB){mode_text}")
-        print(f"🔧 Using model: {model}, language: {language}")
+        print(f"🔧 Using model: {model}, language: {language_cli}")
         
         # Locate whisper executable inside possible virtualenv locations
         possible_whisper = [
@@ -1976,35 +3205,162 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             whisper_exec,
             processed_audio_path,
             "--model", model,
-            "--output_format", "txt",
-            "--output_format", "srt",
-            "--language", language
+            "--output_format", "all",
+            "--language", language_cli
         ]
         
         print(f"🚀 Executing command: {' '.join(command)}")
+        if project_id:
+            add_transcription_log(project_id, f"🚀 Starting Whisper (model: {model}, file: {file_size_mb:.1f}MB)")
         start_time = time.time()
         
         try:
-            # Set timeout based on file size
-            if preview_mode:
-                timeout_seconds = 300  # 5 minutes for preview
+            # Set timeout based on file size + model + acceleration availability.
+            # Previous timeout (1.5 min/MB) was too aggressive for CPU medium/large runs.
+            timeout_override = os.environ.get("WHISPER_TIMEOUT_SECONDS")
+            if timeout_override:
+                try:
+                    timeout_seconds = max(300, int(timeout_override))
+                except ValueError:
+                    timeout_seconds = 0
             else:
-                estimated_minutes = max(30, file_size_mb * 1.5)
-                timeout_seconds = int(estimated_minutes * 60)
-                timeout_seconds = min(timeout_seconds, 14400)  # Cap at 4 hours
+                timeout_seconds = 0
+
+            if timeout_seconds <= 0:
+                if preview_mode:
+                    timeout_seconds = 900  # 15 minutes for preview runs
+                else:
+                    model_factor = {
+                        "tiny": 1.0,
+                        "base": 1.4,
+                        "small": 2.0,
+                        "medium": 3.2,
+                        "large": 5.0,
+                        "large-v2": 5.0,
+                        "large-v3": 5.0,
+                    }.get(str(model).lower(), 3.2)
+
+                    # Conservative baseline for CPU-bound execution.
+                    minutes_per_mb = 2.4 * model_factor
+
+                    # If Apple Silicon acceleration is present, allow tighter timeout.
+                    # We only tighten after a positive check to avoid false optimism.
+                    try:
+                        acceleration_ok = False
+                        torch_python = os.path.join(project_dir, 'whisper-env', 'whisper-env', 'bin', 'python')
+                        if not os.path.exists(torch_python):
+                            torch_python = os.path.join(project_dir, 'whisper-env', 'bin', 'python')
+                        if os.path.exists(torch_python):
+                            probe = subprocess.run(
+                                [
+                                    torch_python,
+                                    '-c',
+                                    'import torch; print(int(bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())))'
+                                ],
+                                capture_output=True,
+                                text=True,
+                                timeout=8,
+                            )
+                            acceleration_ok = (probe.returncode == 0 and probe.stdout.strip() == '1')
+                        if acceleration_ok:
+                            minutes_per_mb *= 0.6
+                    except Exception:
+                        pass
+
+                    estimated_minutes = max(45, int(file_size_mb * minutes_per_mb))
+                    timeout_seconds = min(estimated_minutes * 60, 28800)  # cap at 8 hours
+                    if project_id:
+                        accel_status = "with MPS acceleration" if acceleration_ok else "CPU-bound"
+                        add_transcription_log(project_id, f"⏱️ Timeout: {estimated_minutes}min ({accel_status})")
             
             print(f"⏰ Setting timeout to {timeout_seconds} seconds")
             
             # Use Popen for better process control and cancellation support
             global active_transcriptions, transcription_lock
             
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=project_dir
+            # Create environment with unbuffered output
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
+            if project_id:
+                add_transcription_log(project_id, f"🔄 Initializing Whisper subprocess...")
+            print(f"🔍 [POPEN_PRE] About to create subprocess with command: {command[0]}")
+            print(f"🔍 [POPEN_PRE] Full command: {' '.join(command)}")
+            print(f"🔍 [POPEN_PRE] Working dir: {project_dir}")
+            sys.stdout.flush()
+            
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True,
+                    cwd=project_dir,
+                    env=env,
+                    preexec_fn=None  # Ensure clean subprocess
+                )
+                if project_id:
+                    add_transcription_log(project_id, f"✨ Whisper process running (PID: {process.pid})")
+                print(f"🔍 [POPEN_POST] Process created successfully, PID: {process.pid}")
+                sys.stdout.flush()
+            except Exception as popen_error:
+                if project_id:
+                    add_transcription_log(project_id, f"❌ Failed to start process: {str(popen_error)[:50]}")
+                print(f"❌ [POPEN_ERROR] Failed to create subprocess: {popen_error}")
+                sys.stdout.flush()
+                raise
+
+            if project_id:
+                add_transcription_log(project_id, f"📊 Reading transcription output...")
+            print(f"🔍 [WHISPER] Process started, reading streams...")
+            sys.stdout.flush()
+            # Stream logs live while the process is running
+            stdout_lines = []
+            stderr_lines = []
+
+            def stream_pipe(pipe, label, collector):
+                try:
+                    if pipe is None:
+                        print(f"⚠️ [STREAM] {label} pipe is None")
+                        return
+                    print(f"🔍 [STREAM] Starting to read {label}")
+                    sys.stdout.flush()
+                    line_count = 0
+                    for raw_line in iter(pipe.readline, ''):
+                        if raw_line == '':
+                            print(f"🔍 [STREAM] {label} EOF reached")
+                            break
+                        line_count += 1
+                        collector.append(raw_line)
+                        line = raw_line.rstrip('\n')
+                        if line.strip():
+                            print(f"📡 Whisper {label}: {line}")
+                    print(f"✅ [STREAM] {label} finished reading {line_count} lines")
+                except Exception as stream_err:
+                    print(f"⚠️ Whisper {label} stream error: {stream_err}")
+                finally:
+                    try:
+                        if pipe is not None:
+                            pipe.close()
+                    except Exception:
+                        pass
+
+            stdout_thread = threading.Thread(
+                target=stream_pipe,
+                args=(process.stdout, 'stdout', stdout_lines),
+                daemon=False,
             )
+            stderr_thread = threading.Thread(
+                target=stream_pipe,
+                args=(process.stderr, 'stderr', stderr_lines),
+                daemon=False,
+            )
+            stdout_thread.start()
+            stderr_thread.start()
+            
+            print(f"🔍 [WHISPER] Threads started, now waiting for process...")
             
             # Track the process if project_id is provided
             if project_id:
@@ -2016,19 +3372,54 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                     }
                     print(f"📝 Tracking transcription process for project {project_id}")
             
-            # Wait for process completion with timeout
+            # Wait for process completion with timeout while streaming logs live
+            timed_out = False
+            heartbeat_last = start_time
+            while True:
+                if process.poll() is not None:
+                    print(f"🔍 [WHISPER] Process poll returned {process.returncode}")
+                    break
+
+                elapsed = time.time() - start_time
+                if elapsed > timeout_seconds:
+                    timed_out = True
+                    if project_id:
+                        add_transcription_log(project_id, f"⏰ Timeout reached ({int(elapsed)}s > {timeout_seconds}s)")
+                    print(f"⏰ Process timed out after {timeout_seconds} seconds")
+                    process.kill()
+                    break
+
+                if time.time() - heartbeat_last >= 60:
+                    print(f"⏳ Whisper still running for {int(elapsed)}s (project={project_id})")
+                    heartbeat_last = time.time()
+
+                time.sleep(1)
+
+            # Ensure process and reader threads have ended
+            print(f"🔍 [WHISPER] Waiting for process to finish...")
             try:
-                stdout, stderr = process.communicate(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                print(f"⏰ Process timed out after {timeout_seconds} seconds")
-                process.kill()
-                stdout, stderr = process.communicate()
-                
+                process.wait(timeout=10)
+            except Exception as e:
+                print(f"⚠️ Process wait error: {e}")
+
+            print(f"🔍 [WHISPER] Waiting for threads to finish...")
+            stdout_thread.join(timeout=10)
+            stderr_thread.join(timeout=10)
+            print(f"🔍 [WHISPER] Threads finished")
+
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
+            print(f"🔍 [WHISPER] Collected {len(stdout_lines)} stdout lines, {len(stderr_lines)} stderr lines")
+
+
+            if timed_out:
                 # Clean up tracking
                 if project_id and project_id in active_transcriptions:
                     with transcription_lock:
                         del active_transcriptions[project_id]
-                
+
+                if project_id:
+                    add_transcription_log(project_id, f"❌ Processing timed out")
                 return {
                     'success': False,
                     'error': f'Processing timed out after {timeout_seconds} seconds',
@@ -2040,6 +3431,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             # Check if process was cancelled (return code -15 = SIGTERM)
             if process.returncode == -15:
+                if project_id:
+                    add_transcription_log(project_id, f"🛑 Process cancelled by user")
                 print(f"🛑 Process was terminated (SIGTERM) for project {project_id}")
                 # Clean up tracking if still exists
                 if project_id:
@@ -2057,6 +3450,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 with transcription_lock:
                     if project_id in active_transcriptions:
                         if active_transcriptions[project_id].get('cancelled'):
+                            if project_id:
+                                add_transcription_log(project_id, f"🛑 Processing cancelled")
                             print(f"🛑 Process was cancelled for project {project_id}")
                             del active_transcriptions[project_id]
                             return {
@@ -2067,6 +3462,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                         # Remove from tracking since it completed
                         del active_transcriptions[project_id]
             
+            if project_id:
+                add_transcription_log(project_id, f"⏱️ Whisper completed in {processing_time:.1f}s (exit code: {process.returncode})")
             print(f"✅ Whisper processing completed in {processing_time:.1f} seconds")
             print(f"🔍 Command return code: {process.returncode}")
             
@@ -2086,7 +3483,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             print(f"🔍 Files in current directory:")
             try:
                 current_files = os.listdir('.')
-                relevant_files = [f for f in current_files if audio_name.lower() in f.lower() or f.endswith(('.txt', '.srt', '.vtt'))]
+                relevant_files = [f for f in current_files if audio_name.lower() in f.lower() or f.endswith(('.txt', '.srt', '.vtt', '.json'))]
                 for file in relevant_files[:10]:  # Limit output
                     file_path = os.path.join('.', file)
                     file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
@@ -2095,7 +3492,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 # Also check if there are any files that contain the base temp name
                 base_temp_name = Path(processed_audio_path).name.replace('.mp3', '').replace('.wav', '').replace('.m4a', '')
                 print(f"🔍 Base temp name: {base_temp_name}")
-                temp_related = [f for f in current_files if base_temp_name in f and f.endswith(('.txt', '.srt', '.vtt'))]
+                temp_related = [f for f in current_files if base_temp_name in f and f.endswith(('.txt', '.srt', '.vtt', '.json'))]
                 if temp_related:
                     print(f"🔍 Temp-name related files: {temp_related}")
                     for file in temp_related:
@@ -2111,6 +3508,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             
             transcription = ""
             word_count = 0
+            segments = []
             
             # Enhanced file search - try multiple possible filenames
             possible_files = [
@@ -2125,6 +3523,53 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 f"{Path(audio_file_path).stem}.srt",
                 f"{Path(processed_audio_path).name}.srt",
             ]
+
+            json_files = [
+                f"{audio_name}.json",
+                f"{Path(audio_file_path).stem}.json",
+                f"{Path(processed_audio_path).name}.json",
+            ]
+
+            # Prefer Whisper JSON (if available) so we can preserve confidence metadata.
+            try:
+                unique_json_candidates = []
+                for candidate in json_files:
+                    if candidate and candidate not in unique_json_candidates:
+                        unique_json_candidates.append(candidate)
+
+                for json_candidate in unique_json_candidates:
+                    if os.path.exists(json_candidate):
+                        with open(json_candidate, 'r', encoding='utf-8') as jf:
+                            json_raw = jf.read()
+                        parsed_segments = parse_whisper_json_segments(json_raw)
+                        if parsed_segments:
+                            segments = parsed_segments
+                            print(f"✅ Parsed {len(segments)} rich segments (with confidence) from {json_candidate}")
+                            break
+            except Exception as e:
+                print(f"⚠️ Failed to parse Whisper JSON segments: {e}")
+
+            # Parse timestamp segments from the first available SRT file.
+            # Keep this independent from TXT fallback so we can always power
+            # the transcript rail in the UI.
+            try:
+                unique_srt_candidates = []
+                for candidate in srt_files:
+                    if candidate and candidate not in unique_srt_candidates:
+                        unique_srt_candidates.append(candidate)
+
+                if not segments:
+                    for srt_candidate in unique_srt_candidates:
+                        if os.path.exists(srt_candidate):
+                            with open(srt_candidate, 'r', encoding='utf-8') as sf:
+                                srt_raw = sf.read()
+                            parsed_segments = parse_srt_segments(srt_raw)
+                            if parsed_segments:
+                                segments = parsed_segments
+                                print(f"✅ Parsed {len(segments)} timestamp segments from {srt_candidate}")
+                                break
+            except Exception as e:
+                print(f"⚠️ Failed to parse SRT segments: {e}")
             
             # Also search for any .txt files created recently
             try:
@@ -2222,14 +3667,28 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             if transcription.strip():
                 print(f"📝 Generated transcription: {word_count} words")
                 
-                # Apply Pali corrections
-                print("🔍 Applying Pali corrections...")
+                # Apply Pali corrections to full transcription
+                print("🔍 Applying Pali corrections to transcription...")
                 original_transcription = transcription
                 transcription = apply_pali_corrections(transcription)
                 
                 if transcription != original_transcription:
-                    print("✅ Pali corrections were applied!")
+                    print("✅ Pali corrections were applied to transcription!")
                     word_count = len(transcription.split())
+                
+                # Apply Pali corrections to each segment as well
+                if segments:
+                    print(f"🔍 Applying Pali corrections to {len(segments)} segments...")
+                    corrected_count = 0
+                    for segment in segments:
+                        if 'text' in segment and segment['text']:
+                            original_text = segment['text']
+                            corrected_text = apply_pali_corrections(original_text)
+                            if corrected_text != original_text:
+                                segment['text'] = corrected_text
+                                corrected_count += 1
+                    if corrected_count > 0:
+                        print(f"✅ Applied Pali corrections to {corrected_count} segments")
                 
                 # Apply text formatting as post-processing
                 print("📄 Applying text formatting...")
@@ -2259,14 +3718,8 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                         "created_at": datetime.now().isoformat()
                     }
 
-                    start_marker = "---SOURCE-INFO-START---"
-                    end_marker = "---SOURCE-INFO-END---"
-                    header_json = json.dumps(provenance_meta, indent=2, ensure_ascii=False)
-                    header_block = f"{start_marker}\n{header_json}\n{end_marker}\n\n"
-
-                    # Prepend header to both returned transcription and formatted text
-                    transcription = header_block + transcription
-                    formatted_text = header_block + formatted_text
+                    # Don't prepend SOURCE-INFO to transcription anymore
+                    # transcription and formatted_text remain clean
                 except Exception as e:
                     print(f"⚠️ Could not prepare inline provenance header: {e}")
 
@@ -2333,6 +3786,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 "success": True,
                 "transcription": transcription,
                 "formatted_text": formatted_text,  # Now contains properly formatted text
+                "segments": segments,
                 "word_count": word_count,
                 "processing_time": processing_time,
                 "output_file": text_file,
@@ -2408,7 +3862,7 @@ def create_handler_with_db(db_manager):
 
 def main():
     """Start the PALAScribe multi-user server"""
-    port = 8765
+    port = int(os.getenv('PORT', '8000'))
     
     print("🚀 Starting PALAScribe Multi-User Server...")
     
