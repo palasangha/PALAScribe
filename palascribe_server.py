@@ -2018,6 +2018,22 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             return None
         
         return user
+
+    def is_project_assigned_to_user(self, project, user):
+        """Return True if the project is assigned to the given user."""
+        if not project or not user:
+            return False
+
+        assigned_user_id = str(project.get('assignedToUserId') or project.get('assigned_to_user_id') or '').strip()
+        user_id = str(user.get('id') or '').strip()
+        if assigned_user_id and user_id and assigned_user_id == user_id:
+            return True
+
+        assigned_to = str(project.get('assignedTo') or project.get('assigned_to') or '').strip().lower()
+        user_email = str(user.get('email') or '').strip().lower()
+        user_name = str(user.get('name') or '').strip().lower()
+
+        return bool(assigned_to and assigned_to in [user_email, user_name])
     
     def handle_google_auth(self):
         """Handle Google OAuth token verification"""
@@ -2125,18 +2141,37 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_get_projects(self):
         """Get all projects"""
+        user = self.require_auth()
+        if not user:
+            return
+
         try:
             projects = self.db_manager.get_all_projects()
+
+            if user.get('role') == 'reviewer':
+                projects = [
+                    project for project in projects
+                    if self.is_project_assigned_to_user(project, user)
+                ]
+
             self.send_json_response({"projects": projects})
         except Exception as e:
             self.send_error_response(500, str(e))
     
     def handle_get_project(self, project_id):
         """Get specific project"""
+        user = self.require_auth()
+        if not user:
+            return
+
         try:
             print(f"🔍 Getting project: {project_id}")
             project = self.db_manager.get_project(project_id)
             if project:
+                if user.get('role') == 'reviewer' and not self.is_project_assigned_to_user(project, user):
+                    self.send_error_response(403, "Forbidden - You can only access projects assigned to you")
+                    return
+
                 print(f"✅ Found project: {project.get('name', 'Unnamed')}")
                 print(f"📋 Project audio data: audioFilePath={project.get('audioFilePath')}, audioUrl={project.get('audioUrl')}")
                 # If an exports manifest exists for this project, include the
@@ -2516,8 +2551,20 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     
     def handle_update_project(self, project_id):
         """Update existing project"""
+        user = self.require_auth()
+        if not user:
+            return
+
         try:
             existing_project = self.db_manager.get_project(project_id)
+            if not existing_project:
+                self.send_error_response(404, "Project not found")
+                return
+
+            if user.get('role') == 'reviewer' and not self.is_project_assigned_to_user(existing_project, user):
+                self.send_error_response(403, "Forbidden - You can only update projects assigned to you")
+                return
+
             previous_status = existing_project.get('status') if existing_project else None
             print(f"📋 BEFORE UPDATE: project_id={project_id}, previous_status={previous_status}")
 
@@ -2556,6 +2603,15 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 # Use snake_case if conversion exists, otherwise keep original
                 db_key = field_mapping.get(key, key)
                 converted_data[db_key] = value
+
+            if user.get('role') == 'reviewer':
+                attempts_approve_status = converted_data.get('status') == 'Approved'
+                touches_approval_fields = any(
+                    field in converted_data for field in ['approved_by_user_id', 'approved_date']
+                )
+                if attempts_approve_status or touches_approval_fields:
+                    self.send_error_response(403, "Forbidden - Reviewers cannot approve projects")
+                    return
             
             print(f"🔄 Updating project {project_id} with fields: {list(converted_data.keys())}")
             print(f"📊 Converted data status: {converted_data.get('status')}")

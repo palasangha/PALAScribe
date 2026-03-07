@@ -1851,6 +1851,24 @@ class UIController {
                     this.elements.btnExportPdf.innerText = 'Save as PDF';
                 }
             }
+
+            const currentUser = window.authManager?.currentUser;
+            const isReviewer = currentUser?.role === 'reviewer';
+
+            if (this.elements.btnApproveFinal) {
+                if (isReviewer) {
+                    this.elements.btnApproveFinal.classList.add('hidden');
+                    this.elements.btnApproveFinal.style.display = 'none';
+                } else {
+                    this.elements.btnApproveFinal.classList.remove('hidden');
+                    this.elements.btnApproveFinal.style.display = '';
+                }
+            }
+
+            if (this.elements.btnMarkReviewed) {
+                this.elements.btnMarkReviewed.classList.remove('hidden');
+                this.elements.btnMarkReviewed.style.display = '';
+            }
         }
 
         // Set up audio player
@@ -3535,6 +3553,17 @@ class UIController {
 
     async approveFinal() {
         console.log('🎯 approveFinal() called');
+        const currentUser = window.authManager?.currentUser;
+        if (!currentUser) {
+            this.showErrorMessage('User not authenticated');
+            return;
+        }
+
+        if (currentUser.role === 'reviewer') {
+            this.showErrorMessage('Reviewers can mark projects as reviewed, but cannot approve projects.');
+            return;
+        }
+
         console.log('🔍 Current project status:', {
             currentProject: this.currentProject,
             hasProject: !!this.currentProject,
@@ -3603,11 +3632,6 @@ class UIController {
         
         // Re-apply Pali highlighting to the final text
         const formattedFinalText = this.highlightPaliTerms(finalText);
-        const currentUser = window.authManager?.currentUser;
-        if (!currentUser) {
-            this.showErrorMessage('User not authenticated');
-            return;
-        }
         
         try {
             // Update project to approved status

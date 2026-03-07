@@ -7,6 +7,24 @@ class ServerProjectManager {
         this.loadProjects();
     }
 
+    getAuthToken() {
+        return window.authManager?.authToken || localStorage.getItem('authToken') || '';
+    }
+
+    getRequestHeaders({ includeJson = true, extraHeaders = {} } = {}) {
+        const headers = { ...extraHeaders };
+        if (includeJson) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        const token = this.getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        return headers;
+    }
+
     // Create a new project on server
     async createProject(projectData) {
         const errors = this.validateProjectData(projectData);
@@ -17,9 +35,7 @@ class ServerProjectManager {
         try {
             const response = await fetch(`${this.apiBaseUrl}/projects`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.getRequestHeaders(),
                 body: JSON.stringify({
                     name: projectData.name.trim(),
                     assignedTo: projectData.assignedTo ? projectData.assignedTo.trim() : '',
@@ -49,7 +65,9 @@ class ServerProjectManager {
     // Load all projects from server
     async loadProjects() {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/projects`);
+            const response = await fetch(`${this.apiBaseUrl}/projects`, {
+                headers: this.getRequestHeaders({ includeJson: false })
+            });
             if (response.ok) {
                 const data = await response.json();
                 this.projects = data.projects || [];
@@ -78,7 +96,9 @@ class ServerProjectManager {
         // Fetch from server
         try {
             console.log('🌐 Fetching fresh project data from server for:', projectId);
-            const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}`);
+            const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}`, {
+                headers: this.getRequestHeaders({ includeJson: false })
+            });
             if (response.ok) {
                 const project = await response.json();
                 console.log('📥 Received project data:', {
@@ -119,9 +139,7 @@ class ServerProjectManager {
         try {
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.getRequestHeaders(),
                 body: JSON.stringify(updates)
             });
 
@@ -151,7 +169,8 @@ class ServerProjectManager {
     async deleteProject(projectId) {
         try {
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: this.getRequestHeaders({ includeJson: false })
             });
 
             if (!response.ok) {
@@ -190,6 +209,7 @@ class ServerProjectManager {
 
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/audio`, {
                 method: 'POST',
+                headers: this.getRequestHeaders({ includeJson: false }),
                 body: formData
             });
 
@@ -239,9 +259,7 @@ class ServerProjectManager {
 
             const response = await fetch(`${this.apiBaseUrl}/projects/${projectId}/transcribe`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.getRequestHeaders(),
                 body: JSON.stringify(transcriptionParams)
             });
 
