@@ -1777,6 +1777,13 @@ class UIController {
                 [CONFIG.PROJECT_STATUS.APPROVED]: 'bg-purple-100 text-purple-800',
                 [CONFIG.PROJECT_STATUS.ERROR]: 'bg-red-100 text-red-800'
             };
+
+            const metadataSyncStatus = project.metadataSyncStatus || project.metadata_sync_status || 'not_started';
+            const storageSyncStatus = project.storageSyncStatus || project.storage_sync_status || 'not_started';
+            const storageSyncError = project.storageError || project.storage_error || '';
+            const syncInfoHtml = project.status === CONFIG.PROJECT_STATUS.APPROVED
+                ? `<div class="text-xs text-gray-600 mt-1">Metadata: <span class="font-medium">${UTILS.escapeHtml(metadataSyncStatus)}</span> • Storage: <span class="font-medium">${UTILS.escapeHtml(storageSyncStatus)}</span>${storageSyncError ? ` • Error: ${UTILS.escapeHtml(storageSyncError)}` : ''}</div>`
+                : '';
             
             this.elements.reviewProjectInfo.innerHTML = `
                 <span class="font-semibold text-gray-900 text-base">${UTILS.escapeHtml(project.name)}</span>
@@ -1785,6 +1792,7 @@ class UIController {
                 <span class="px-2.5 py-1 text-xs font-medium rounded-md ${statusColor[project.status] || 'bg-gray-100 text-gray-800'}">
                     ${project.status}
                 </span>
+                ${syncInfoHtml}
             `;
             // If server provided a human-readable header (exportHeaderText), show it in the small header area
             const headerEl = document.getElementById('project-header');

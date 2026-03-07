@@ -27,6 +27,13 @@ import threading
 import secrets
 import hashlib
 
+try:
+    import websocket as websocket_client
+    MCP_WS_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ websocket-client not available: {e}")
+    MCP_WS_AVAILABLE = False
+
 # Load environment variables
 from pathlib import Path
 env_path = Path(__file__).parent / '.env'
@@ -65,6 +72,17 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/auth/google/callback')
 SUPER_ADMIN_EMAIL = os.getenv('SUPER_ADMIN_EMAIL', '')
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32))
+MCP_SERVER_WS_URL = os.getenv('MCP_SERVER_WS_URL', 'ws://localhost:4000')
+MCP_METADATA_AGENT_ID = os.getenv('MCP_METADATA_AGENT_ID', 'metadata-extraction-agent')
+MCP_METADATA_TOOL_NAME = os.getenv('MCP_METADATA_TOOL_NAME', 'extract_metadata')
+MCP_METADATA_MODEL = os.getenv('MCP_METADATA_MODEL', 'ollama')
+MCP_METADATA_OUTPUT_TYPE = os.getenv('MCP_METADATA_OUTPUT_TYPE', 'pala')
+MCP_STORAGE_AGENT_ID = os.getenv('MCP_STORAGE_AGENT_ID', 'storage-agent')
+MCP_STORAGE_TOOL_NAME = os.getenv('MCP_STORAGE_TOOL_NAME', 'store_document')
+MCP_STORAGE_TYPE = os.getenv('MCP_STORAGE_TYPE', 'PalaScribe')
+MCP_STORAGE_CREATED_BY = os.getenv('MCP_STORAGE_CREATED_BY', 'web-dashboard')
+# Increased timeout for MCP calls (metadata extraction can take 60-120s with LLM processing)
+AGENT_HTTP_TIMEOUT_SECONDS = int(os.getenv('AGENT_HTTP_TIMEOUT_SECONDS', '120'))
 
 # Global variables for tracking active transcriptions
 active_transcriptions = {}  # {project_id: {'process': subprocess_obj, 'cancelled': bool}}
@@ -735,6 +753,286 @@ def verify_jwt_token(token):
         return None
 
 
+def _select_approved_text(project):
+    """Select the best approved text content from project fields."""
+    return (
+        project.get('edited_text')
+        or project.get('editedText')
+        or project.get('transcription')
+        or ''
+    )
+
+
+def _extract_metadata_via_mcp(text):
+    """Invoke metadata extraction agent via MCP WebSocket JSON-RPC."""
+    if not MCP_WS_AVAILABLE:
+        raise Exception("websocket-client dependency is not available")
+
+    return _invoke_mcp_tool(
+        agent_id=MCP_METADATA_AGENT_ID,
+        tool_name=MCP_METADATA_TOOL_NAME,
+        arguments={
+            "text": text,
+            "model": MCP_METADATA_MODEL,
+            "output_type": "combined"
+        }
+    )
+
+
+def _invoke_mcp_tool(agent_id, tool_name, arguments):
+    """Invoke any MCP tool via WebSocket JSON-RPC and return `result`."""
+    if not MCP_WS_AVAILABLE:
+        raise Exception("websocket-client dependency is not available")
+
+    request_id = f"req-{uuid.uuid4()}"
+    request_payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/invoke",
+        "params": {
+            "agentId": agent_id,
+            "toolName": tool_name,
+            "arguments": arguments
+        },
+        "id": request_id
+    }
+
+    # Log request keys for debugging
+    arg_keys = list(arguments.keys()) if arguments else []
+    print(f"🔌 MCP Request: {agent_id}/{tool_name} with args: {arg_keys}")
+    print(f"📤 Full request payload:")
+    print(json.dumps(request_payload, indent=2, ensure_ascii=False))
+
+    ws = None
+    try:
+        ws = websocket_client.create_connection(MCP_SERVER_WS_URL, timeout=AGENT_HTTP_TIMEOUT_SECONDS)
+        ws.send(json.dumps(request_payload, ensure_ascii=False))
+
+        deadline = time.time() + AGENT_HTTP_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            raw_message = ws.recv()
+            if not raw_message:
+                continue
+
+            parsed = json.loads(raw_message)
+            if parsed.get('id') != request_id:
+                continue
+
+            if 'error' in parsed and parsed['error']:
+                raise Exception(f"MCP error: {parsed['error']}")
+
+            result = parsed.get('result')
+            if result is None:
+                raise Exception("MCP response did not contain result")
+            
+            # Check if result indicates failure (MCP agents return success: false with error message)
+            if isinstance(result, dict) and result.get('success') is False:
+                error_msg = result.get('error', 'Unknown error from MCP agent')
+                raise Exception(f"MCP agent failed: {error_msg}")
+            
+            return result
+
+        raise Exception("Timed out waiting for MCP metadata response")
+    finally:
+        try:
+            if ws:
+                ws.close()
+        except Exception:
+            pass
+
+
+def _store_document_via_mcp(project, approved_text, metadata_payload):
+    """Invoke storage-agent/store_document MCP tool with PALAScribe approval payload."""
+    source_name = (
+        project.get('audio_file_name')
+        or project.get('audioFileName')
+        or project.get('name')
+        or 'document.txt'
+    )
+    file_format = 'txt'
+    if '.' in source_name:
+        file_format = source_name.rsplit('.', 1)[-1].lower() or 'txt'
+
+    language = 'en'
+    try:
+        model_info_raw = project.get('processing_model') or project.get('processingModel') or '{}'
+        model_info = json.loads(model_info_raw) if isinstance(model_info_raw, str) else model_info_raw
+        if isinstance(model_info, dict) and model_info.get('language'):
+            language = str(model_info.get('language')).lower()
+    except Exception:
+        language = 'en'
+
+    storage_arguments = {
+        "type": "Transcription",
+        "original_file": source_name,
+        "file_format": file_format,
+        "processed_data": {
+            "text": approved_text
+        },
+        "metadata": {
+            "language": language,
+            "source": "PALAScribe",
+            **(metadata_payload if isinstance(metadata_payload, dict) else {})
+        },
+        "app_data": {
+            "app": "PalaScribe",
+            "project_name": project.get('name') or '',
+            "project_id": project.get('id') or '',
+            "status": project.get('status') or 'Approved',
+            "assigned_to": project.get('assigned_to') or project.get('assignedTo') or '',
+            "reviewed_by": project.get('reviewed_by_user_id') or '',
+            "approved_by": project.get('approved_by_user_id') or '',
+            "approved_date": project.get('approved_date') or project.get('approvedDate') or '',
+            "created_date": project.get('created') or '',
+            "audio_file": source_name
+        },
+        "created_by": "PalaScribe",
+        "tags": [
+            "palascribe",
+            "transcription",
+            language.lower() if language else "unknown",
+            project.get('name', '').lower().replace(' ', '-') if project.get('name') else 'project',
+            "approved"
+        ]
+    }
+
+    return _invoke_mcp_tool(
+        agent_id=MCP_STORAGE_AGENT_ID,
+        tool_name=MCP_STORAGE_TOOL_NAME,
+        arguments=storage_arguments
+    )
+
+
+def sync_approved_project_to_pala(db_manager, project_id):
+    """Background worker: extract metadata and store approved project in Pala platform."""
+    print(f"\n{'='*60}")
+    print(f"🔄 SYNC THREAD STARTED for project {project_id}")
+    print(f"   MCP WebSocket Available: {MCP_WS_AVAILABLE}")
+    print(f"   MCP Server URL: {MCP_SERVER_WS_URL}")
+    print(f"   Current thread: {threading.current_thread().name}")
+    print(f"{'='*60}\n")
+    
+    if not MCP_WS_AVAILABLE:
+        print(f"❌ SYNC ABORTED: websocket-client not available")
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'failed',
+            'storage_sync_status': 'failed',
+            'storage_error': 'websocket-client dependency is not available'
+        })
+        return
+
+    sync_stage = 'metadata'
+
+    try:
+        project = db_manager.get_project(project_id)
+        if not project:
+            print(f"❌ SYNC ABORTED: Project {project_id} not found in database")
+            return
+
+        print(f"📦 Project loaded: name='{project.get('name')}', has_transcription={bool(project.get('transcription'))}, has_editedText={bool(project.get('editedText'))}, has_edited_text={bool(project.get('edited_text'))}")
+        
+        approved_text = _select_approved_text(project)
+        if not approved_text or not str(approved_text).strip():
+            print(f"❌ SYNC ABORTED: No approved text found")
+            db_manager.update_project(project_id, {
+                'metadata_sync_status': 'failed',
+                'storage_sync_status': 'failed',
+                'storage_error': 'No approved text found for metadata extraction'
+            })
+            return
+
+        print(f"📝 Approved text length: {len(approved_text)} characters")
+        
+        # Log first 200 chars of text for debugging
+        text_preview = approved_text[:200] if approved_text else "(empty)"
+        print(f"📄 Text preview: {text_preview}...")
+        
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'in_progress',
+            'storage_sync_status': 'pending',
+            'storage_error': ''
+        })
+        print(f"🔄 Status updated: metadata=in_progress, storage=pending")
+
+        print(f"\n📤 STEP 1: Extracting metadata via MCP...")
+        
+        # Prepare metadata arguments
+        metadata_arguments = {
+            "text": approved_text,
+            "model": MCP_METADATA_MODEL,
+            "output_type": "combined"
+        }
+        
+        # Log the request
+        metadata_request_payload = {
+            "jsonrpc": "2.0",
+            "method": "tools/invoke",
+            "params": {
+                "agentId": MCP_METADATA_AGENT_ID,
+                "toolName": MCP_METADATA_TOOL_NAME,
+                "arguments": metadata_arguments
+            }
+        }
+        print(f"🔌 MCP Request: {MCP_METADATA_AGENT_ID}/{MCP_METADATA_TOOL_NAME}")
+        print(f"📤 Full metadata request payload:")
+        print(json.dumps(metadata_request_payload, indent=2, ensure_ascii=False))
+        
+        metadata_payload = _extract_metadata_via_mcp(approved_text)
+        print(f"✅ Metadata extracted successfully")
+        print(f"   Agent: {MCP_METADATA_AGENT_ID}/{MCP_METADATA_TOOL_NAME}")
+        print(f"   Metadata keys: {list(metadata_payload.keys()) if metadata_payload else 'None'}")
+
+        db_manager.update_project(project_id, {
+            'metadata_sync_status': 'extracted',
+            'metadata_payload': json.dumps(metadata_payload, ensure_ascii=False),
+            'metadata_synced_at': datetime.now().isoformat(),
+            'storage_sync_status': 'in_progress'
+        })
+        print(f"🔄 Status updated: metadata=extracted, storage=in_progress")
+
+        sync_stage = 'storage'
+        print(f"\n📤 STEP 2: Storing document via MCP...")
+        storage_result = _store_document_via_mcp(project, approved_text, metadata_payload)
+        print(f"✅ Storage completed successfully")
+        print(f"   Agent: {MCP_STORAGE_AGENT_ID}/{MCP_STORAGE_TOOL_NAME}")
+        print(f"   Storage result keys: {list(storage_result.keys()) if storage_result else 'None'}")
+
+        storage_record_id = (
+            storage_result.get('recordId')
+            or storage_result.get('id')
+            or storage_result.get('storageId')
+            or ''
+        )
+
+        db_manager.update_project(project_id, {
+            'storage_sync_status': 'stored',
+            'storage_record_id': str(storage_record_id),
+            'storage_synced_at': datetime.now().isoformat(),
+            'storage_error': ''
+        })
+        print(f"\n{'='*60}")
+        print(f"✅ SYNC COMPLETED for project {project_id}")
+        print(f"   Storage Record ID: {storage_record_id}")
+        print(f"{'='*60}\n")
+
+    except Exception as e:
+        err = str(e)
+        print(f"\n{'='*60}")
+        print(f"❌ SYNC FAILED for project {project_id}")
+        print(f"   Stage: {sync_stage}")
+        print(f"   Error: {err}")
+        print(f"{'='*60}\n")
+        import traceback
+        traceback.print_exc()
+        
+        failed_updates = {
+            'storage_sync_status': 'failed',
+            'storage_error': err
+        }
+        if sync_stage == 'metadata':
+            failed_updates['metadata_sync_status'] = 'failed'
+        db_manager.update_project(project_id, failed_updates)
+
+
 def verify_google_token(token):
     """Verify Google ID token and return user info"""
     try:
@@ -860,6 +1158,13 @@ class DatabaseManager:
                 approved_by_user_id TEXT,
                 approved_date TEXT,
                 processing_model TEXT,
+                metadata_sync_status TEXT DEFAULT 'not_started',
+                metadata_payload TEXT,
+                metadata_synced_at TEXT,
+                storage_sync_status TEXT DEFAULT 'not_started',
+                storage_record_id TEXT,
+                storage_synced_at TEXT,
+                storage_error TEXT,
                 FOREIGN KEY (created_by_user_id) REFERENCES users (id),
                 FOREIGN KEY (assigned_to_user_id) REFERENCES users (id),
                 FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id),
@@ -976,6 +1281,55 @@ class DatabaseManager:
                     print("✅ Added 'processing_model' column to projects table")
                 except Exception as me:
                     print(f"⚠️ Could not add processing_model column: {me}")
+
+            if 'metadata_sync_status' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_sync_status TEXT DEFAULT 'not_started'")
+                    print("✅ Added 'metadata_sync_status' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_sync_status column: {me}")
+
+            if 'metadata_payload' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_payload TEXT")
+                    print("✅ Added 'metadata_payload' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_payload column: {me}")
+
+            if 'metadata_synced_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN metadata_synced_at TEXT")
+                    print("✅ Added 'metadata_synced_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add metadata_synced_at column: {me}")
+
+            if 'storage_sync_status' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_sync_status TEXT DEFAULT 'not_started'")
+                    print("✅ Added 'storage_sync_status' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_sync_status column: {me}")
+
+            if 'storage_record_id' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_record_id TEXT")
+                    print("✅ Added 'storage_record_id' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_record_id column: {me}")
+
+            if 'storage_synced_at' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_synced_at TEXT")
+                    print("✅ Added 'storage_synced_at' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_synced_at column: {me}")
+
+            if 'storage_error' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE projects ADD COLUMN storage_error TEXT")
+                    print("✅ Added 'storage_error' column to projects table")
+                except Exception as me:
+                    print(f"⚠️ Could not add storage_error column: {me}")
 
             # Backfill export_provenance from existing exports/*/index.json if present
             try:
@@ -1112,7 +1466,8 @@ class DatabaseManager:
                         'edited_text', 'rich_content', 'word_count', 'processing_time', 
                         'is_preview', 'error_message', 'audio_file_name', 'audio_file_path', 'export_provenance',
                         'transcript_segments', 'reviewed_by_user_id', 'reviewed_date', 'approved_by_user_id', 'approved_date',
-                        'processing_model']:
+                        'processing_model', 'metadata_sync_status', 'metadata_payload', 'metadata_synced_at',
+                        'storage_sync_status', 'storage_record_id', 'storage_synced_at', 'storage_error']:
                 update_fields.append(f"{field} = ?")
                 # Serialize transcript_segments to JSON if it's a list/dict
                 if field == 'transcript_segments' and isinstance(value, (list, dict)):
@@ -1252,7 +1607,14 @@ class DatabaseManager:
             'approved_by_user_id': 'approvedByUserId',
             'approved_by_name': 'approvedByName',
             'approved_date': 'approvedDate',
-            'processing_model': 'processingModel'
+            'processing_model': 'processingModel',
+            'metadata_sync_status': 'metadataSyncStatus',
+            'metadata_payload': 'metadataPayload',
+            'metadata_synced_at': 'metadataSyncedAt',
+            'storage_sync_status': 'storageSyncStatus',
+            'storage_record_id': 'storageRecordId',
+            'storage_synced_at': 'storageSyncedAt',
+            'storage_error': 'storageError'
         }
         
         # Create new project dict with camelCase field names
@@ -2155,6 +2517,10 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
     def handle_update_project(self, project_id):
         """Update existing project"""
         try:
+            existing_project = self.db_manager.get_project(project_id)
+            previous_status = existing_project.get('status') if existing_project else None
+            print(f"📋 BEFORE UPDATE: project_id={project_id}, previous_status={previous_status}")
+
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode('utf-8'))
@@ -2174,7 +2540,14 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 'isPreview': 'is_preview',
                 'errorMessage': 'error_message',
                 'transcriptSegments': 'transcript_segments',
-                'exportProvenance': 'export_provenance'
+                'exportProvenance': 'export_provenance',
+                'metadataSyncStatus': 'metadata_sync_status',
+                'metadataPayload': 'metadata_payload',
+                'metadataSyncedAt': 'metadata_synced_at',
+                'storageSyncStatus': 'storage_sync_status',
+                'storageRecordId': 'storage_record_id',
+                'storageSyncedAt': 'storage_synced_at',
+                'storageError': 'storage_error'
             }
             
             # Convert field names
@@ -2185,6 +2558,7 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
                 converted_data[db_key] = value
             
             print(f"🔄 Updating project {project_id} with fields: {list(converted_data.keys())}")
+            print(f"📊 Converted data status: {converted_data.get('status')}")
             
             self.db_manager.update_project(project_id, converted_data)
             
@@ -2192,6 +2566,43 @@ class PALAScribeHandler(BaseHTTPRequestHandler):
             project = self.db_manager.get_project(project_id)
             if project:
                 self.send_json_response(project)
+
+                try:
+                    current_status = converted_data.get('status')
+                    print(f"🔍 Status check: previous='{previous_status}' -> current='{current_status}'")
+                    
+                    # Trigger sync if:
+                    # 1. Status transitioned TO Approved (new approval)
+                    # 2. Status IS Approved AND was explicitly sent in this update (re-approval or explicit approval)
+                    transitioned_to_approved = (
+                        current_status == 'Approved'
+                        and previous_status != 'Approved'
+                    )
+                    explicitly_set_to_approved = (
+                        current_status == 'Approved'
+                        and 'status' in data  # Only if status was in the request
+                    )
+                    should_sync = transitioned_to_approved or explicitly_set_to_approved
+                    
+                    print(f"🔍 Transition to approved: {transitioned_to_approved}")
+                    print(f"🔍 Explicitly set to Approved: {explicitly_set_to_approved}")
+                    print(f"🔍 Should sync: {should_sync}")
+                    
+                    if should_sync:
+                        print(f"🚀 Triggering metadata/storage sync for approved project {project_id}")
+                        self.db_manager.update_project(project_id, {
+                            'metadata_sync_status': 'pending',
+                            'storage_sync_status': 'pending',
+                            'storage_error': ''
+                        })
+                        threading.Thread(
+                            target=sync_approved_project_to_pala,
+                            args=(self.db_manager, project_id),
+                            daemon=True
+                        ).start()
+                except Exception as e:
+                    print(f"⚠️ Could not trigger metadata/storage sync for project {project_id}: {e}")
+
                 # Trigger PDF regeneration when transcription or edited text changes,
                 # or when status transitions to 'ready'. Run in background.
                 try:

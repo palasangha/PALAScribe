@@ -11,3 +11,6 @@ PyJWT>=2.6.0
 
 # HTTPS support (optional but recommended for production)
 requests>=2.28.0
+
+# MCP WebSocket integration
+websocket-client>=1.8.0
