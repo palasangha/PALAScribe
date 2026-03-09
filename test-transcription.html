@@ -94,7 +94,7 @@
                 }
 
                 statusEl.textContent = 'Connecting to backend...';
-                progressEl.textContent = 'Sending request to http://localhost:8765/process';
+                progressEl.textContent = 'Sending request to http://localhost:3010/process';
                 log('📡 Sending request to backend...');
 
                 const startTime = Date.now();
@@ -107,7 +107,7 @@
                     controller.abort();
                 }, timeoutMs);
 
-                const response = await fetch('http://localhost:8765/process', {
+                const response = await fetch('http://localhost:3010/process', {
                     method: 'POST',
                     body: formData,
                     signal: controller.signal
@@ -176,7 +176,7 @@
 
         document.getElementById('testBtn').addEventListener('click', testTranscription);
         log('🚀 Test page loaded. Select an audio file and click Test Transcription.');
-        log('🔧 Make sure the Whisper server is running on localhost:8765');
+        log('🔧 Make sure the Whisper server is running on localhost:3010');
     </script>
 </body>
 </html>

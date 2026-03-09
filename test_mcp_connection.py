@@ -16,7 +16,7 @@ except ImportError:
     sys.exit(1)
 
 # Configuration
-MCP_SERVER_WS_URL = os.environ.get("MCP_SERVER_WS_URL", "ws://localhost:4000")
+MCP_SERVER_WS_URL = os.environ.get("MCP_SERVER_WS_URL", "ws://localhost:3010")
 TIMEOUT = 120  # seconds - increased for LLM processing
 
 print(f"\n{'='*60}")

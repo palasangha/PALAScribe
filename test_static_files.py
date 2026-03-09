@@ -10,7 +10,7 @@ import sys
 
 def test_static_file_serving():
     """Test that static files are properly served"""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     # Test files that should be served
     static_files = [
@@ -42,7 +42,7 @@ def test_static_file_serving():
 
 def test_production_readiness():
     """Test for production-ready setup - no CDN warnings, proper favicon, etc."""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     print("🏭 Testing production readiness...")
     
@@ -102,7 +102,7 @@ def test_production_readiness():
 
 def test_html_loads_dependencies():
     """Test that HTML files contain proper script/css references"""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     try:
         response = requests.get(f"{base_url}/index-server.html")
@@ -143,7 +143,7 @@ def test_html_loads_dependencies():
 
 def test_ui_elements_present():
     """Test that essential UI elements are present in the HTML"""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     try:
         response = requests.get(f"{base_url}/index-server.html")
@@ -194,7 +194,7 @@ def test_ui_elements_present():
 
 def test_complete_page_load():
     """Test that a complete page load would work"""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     print("🧪 Testing complete page load simulation...")
     
@@ -240,7 +240,7 @@ def test_complete_page_load():
         print(f"❌ Complete page load test failed: {e}")
         return False
     """Test that a complete page load would work"""
-    base_url = 'http://localhost:8765'
+    base_url = 'http://localhost:3010'
     
     print("🧪 Testing complete page load simulation...")
     
